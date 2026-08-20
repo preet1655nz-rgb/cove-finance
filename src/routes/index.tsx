@@ -1,0 +1,152 @@
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { ArrowUpRight } from "lucide-react";
+import { CategoryDonut, FlowChart } from "@/components/charts";
+import { PageFrame } from "@/components/page-frame";
+import { PeriodSelect } from "@/components/period-select";
+import { TransactionRow } from "@/components/transaction-row";
+import { Progress } from "@/components/ui/progress";
+import { getCategory } from "@/lib/categories";
+import { money, pct, signedMoney } from "@/lib/format";
+import { inPeriod, netOf, periodRange, spentInCategory, sumBy } from "@/lib/period";
+import { useFinanceStore } from "@/lib/store";
+import { endOfMonth, startOfMonth, todayISO } from "@/lib/utils";
+
+export const Route = createFileRoute("/")({ component: Home });
+
+function Home() {
+  return (
+    <PageFrame>
+      <Dashboard />
+    </PageFrame>
+  );
+}
+
+function Dashboard() {
+  const txs = useFinanceStore((s) => s.transactions);
+  const budgets = useFinanceStore((s) => s.budgets);
+  const period = useFinanceStore((s) => s.period);
+  const setPeriod = useFinanceStore((s) => s.setPeriod);
+  const name = useFinanceStore((s) => s.settings.displayName);
+  const currency = useFinanceStore((s) => s.settings.currency);
+  const slice = txs.filter((t) => inPeriod(t, period));
+  const income = sumBy(txs, "income", period);
+  const expense = sumBy(txs, "expense", period);
+  const net = income - expense;
+  const balance = netOf(txs);
+  const { label } = periodRange(period);
+  const recent = [...txs].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)).slice(0, 6);
+  const today = todayISO();
+  const from = startOfMonth(today);
+  const to = endOfMonth(today);
+  const budgetRows = budgets
+    .map((b) => {
+      const spent = spentInCategory(txs, b.categoryId, from, to);
+      return { ...b, spent, cat: getCategory(b.categoryId), ratio: b.amount ? spent / b.amount : 0 };
+    })
+    .sort((a, b) => b.ratio - a.ratio)
+    .slice(0, 4);
+
+  return (
+    <div className="space-y-8">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-[13px] text-muted-foreground">Good to see you, {name}</p>
+          <h1 className="mt-1 font-display text-3xl tracking-tight sm:text-4xl">Overview</h1>
+        </div>
+        <PeriodSelect value={period} onChange={setPeriod} />
+      </header>
+
+      <section className="rounded-xl bg-card p-6 shadow-card sm:p-8">
+        <p className="text-[13px] text-muted-foreground">Balance</p>
+        <p className="mt-2 font-display text-5xl tracking-tight tabular-nums sm:text-6xl">{money(balance, currency, true)}</p>
+        <p className="mt-3 text-sm text-muted-foreground">
+          {signedMoney(net, currency)} {label.toLowerCase()}
+        </p>
+        <div className="mt-8 grid grid-cols-3 gap-4 border-t border-border pt-6">
+          <Stat label="In" value={money(income, currency, true)} tone="income" />
+          <Stat label="Out" value={money(expense, currency, true)} tone="expense" />
+          <Stat label="Net" value={signedMoney(net, currency)} />
+        </div>
+      </section>
+
+      <div className="grid gap-4 lg:grid-cols-5">
+        <section className="rounded-xl bg-card p-5 shadow-card lg:col-span-3">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-sm font-medium">Cash flow</h2>
+            <span className="text-[12px] text-muted-foreground">Six months</span>
+          </div>
+          <FlowChart txs={txs} currency={currency} />
+        </section>
+        <section className="rounded-xl bg-card p-5 shadow-card lg:col-span-2">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-sm font-medium">Spending</h2>
+            <span className="text-[12px] text-muted-foreground">{label}</span>
+          </div>
+          <CategoryDonut txs={slice} currency={currency} />
+        </section>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="rounded-xl bg-card p-5 shadow-card">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-sm font-medium">Budgets this month</h2>
+            <Link to="/budgets" className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground">
+              All <ArrowUpRight className="size-3.5" />
+            </Link>
+          </div>
+          {budgetRows.length ? (
+            <ul className="space-y-4">
+              {budgetRows.map((b) => (
+                <li key={b.id}>
+                  <div className="mb-1.5 flex items-baseline justify-between gap-2 text-[13px]">
+                    <span>{b.cat.name}</span>
+                    <span className="tabular-nums text-muted-foreground">
+                      {money(b.spent, currency)} / {money(b.amount, currency)}
+                    </span>
+                  </div>
+                  <Progress
+                    value={b.ratio * 100}
+                    indicatorClassName={b.ratio >= 1 ? "bg-expense" : b.ratio >= 0.8 ? "bg-chart-5" : "bg-income"}
+                  />
+                  <p className="mt-1 text-[11px] text-muted-foreground">{pct(b.ratio * 100)} used</p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="py-8 text-sm text-muted-foreground">No budgets yet.</p>
+          )}
+        </section>
+        <section className="rounded-xl bg-card p-5 shadow-card">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-sm font-medium">Recent</h2>
+            <Link to="/activity" className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground">
+              Activity <ArrowUpRight className="size-3.5" />
+            </Link>
+          </div>
+          {recent.length ? recent.map((tx) => <TransactionRow key={tx.id} tx={tx} />) : (
+            <p className="py-8 text-sm text-muted-foreground">Add your first entry with the Add button, or press N.</p>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, tone }: { label: string; value: string; tone?: "income" | "expense" }) {
+  return (
+    <div>
+      <p className="text-[11px] tracking-wide text-muted-foreground uppercase">{label}</p>
+      <p
+        className={
+          tone === "income"
+            ? "mt-1 text-lg font-medium tabular-nums text-income sm:text-xl"
+            : tone === "expense"
+              ? "mt-1 text-lg font-medium tabular-nums text-expense sm:text-xl"
+              : "mt-1 text-lg font-medium tabular-nums sm:text-xl"
+        }
+      >
+        {value}
+      </p>
+    </div>
+  );
+}

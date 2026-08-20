@@ -1,0 +1,93 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme {
+  --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Newsreader", ui-serif, Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+
+  --color-background: #f3f1ec;
+  --color-foreground: #1c1b18;
+  --color-card: #fbf9f5;
+  --color-card-foreground: #1c1b18;
+  --color-popover: #fffcf8;
+  --color-popover-foreground: #1c1b18;
+  --color-primary: #2a2e2c;
+  --color-primary-foreground: #f6f4ef;
+  --color-secondary: #e8e4dc;
+  --color-secondary-foreground: #1c1b18;
+  --color-muted: #edeae3;
+  --color-muted-foreground: #6f6c64;
+  --color-accent: #e4e0d8;
+  --color-accent-foreground: #1c1b18;
+  --color-destructive: #8a4336;
+  --color-destructive-foreground: #fbf9f5;
+  --color-border: #e2ded5;
+  --color-input: #e2ded5;
+  --color-ring: #2a2e2c;
+  --color-income: #3a5a48;
+  --color-expense: #8a4336;
+  --color-chart-1: #3a5a48;
+  --color-chart-2: #8a4336;
+  --color-chart-3: #5c6b73;
+  --color-chart-4: #6b7c6e;
+  --color-chart-5: #7a6b5c;
+  --color-sidebar: #1c1b18;
+  --color-sidebar-foreground: #f3f1ec;
+  --color-sidebar-muted: #9a968c;
+
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-2xl: 28px;
+  --radius: 12px;
+
+  --shadow-border:
+    0px 0px 0px 1px rgb(28 27 24 / 0.06),
+    0px 1px 2px -1px rgb(28 27 24 / 0.06),
+    0px 2px 4px 0px rgb(28 27 24 / 0.04);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgb(28 27 24 / 0.035), transparent);
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+}
+
+@utility shadow-card {
+  box-shadow: var(--shadow-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
