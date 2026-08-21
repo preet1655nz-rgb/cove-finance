@@ -79,3 +79,30 @@ test("local brain sets budget and answers tax", () => {
   const tax = interpretChat("tax on 90000", { ...empty(), currency: "NZD" });
   assert.match(tax.reply, /19,577|19577/);
 });
+
+test("GST, student loan, and KiwiSaver answers stay on the 2026 tables", () => {
+  const gst = interpretChat("GST on 115", { ...empty(), currency: "NZD" });
+  assert.match(gst.reply, /15\.00/);
+  const sl = interpretChat("student loan on 70000", { ...empty(), currency: "NZD" });
+  assert.match(sl.reply, /5,504|5504/);
+  const ks = interpretChat("What is KiwiSaver?", { ...empty(), currency: "NZD" });
+  assert.match(ks.reply, /3\.5%/);
+  assert.doesNotMatch(ks.reply, /I would file/i);
+});
+
+test("how much groceries quotes the ledger, never invents", () => {
+  const hit = interpretChat("How much did I spend on groceries?", { ...empty(), currency: "NZD" });
+  assert.match(hit.reply, /87\.43/);
+  const blank = interpretChat("How much did I spend on groceries?", {
+    ...empty(),
+    transactions: [],
+    currency: "NZD",
+  });
+  assert.match(blank.reply, /nothing tagged|0\.00|\\$0/i);
+});
+
+test("mutations still apply and do not wipe the grocery row", () => {
+  const r = interpretChat("Set dining budget to 250", { ...empty(), currency: "NZD" });
+  assert.equal(r.budgets?.[0]?.amount, 250);
+  assert.equal(r.transactions, undefined);
+});

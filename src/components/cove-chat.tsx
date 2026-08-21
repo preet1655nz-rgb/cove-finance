@@ -7,9 +7,9 @@ import { cn } from "@/lib/utils";
 const SUGGESTIONS = [
   "How am I doing?",
   "Tax on 90000",
+  "GST on 115",
+  "What is KiwiSaver?",
   "Set groceries budget to 400",
-  "Show transfers",
-  "What is in Other?",
 ];
 
 export function CoveChat() {

@@ -1,7 +1,7 @@
 import { CATEGORIES, getCategory, isTransferCategory } from "./categories";
 import { money } from "./format";
-import { applyRulesToTxs, isTransferTx, livingTxs, pairTransfers, payeeBreakdown, prettyPayee, transferFlows } from "./intelligence";
-import { explainTax, parseMoneyish } from "./nz-finance";
+import { applyRulesToTxs, isTransferTx, livingTxs, pairTransfers, payeeBreakdown, prettyPayee, resolveCategoryAlias, transferFlows } from "./intelligence";
+import { annualize, explainTax, gstExclusive, gstInclusive, gstPortion, mortgageComfort, parseMoneyish, split503020, takeHome } from "./nz-finance";
 import type { BankAccount, Budget, CoveFact, MemoryRule, RecurringBill, Settings, Transaction } from "./types";
 import { todayISO, uid } from "./utils";
 
@@ -51,6 +51,21 @@ export function buildSnapshot(state: LedgerState) {
     const balance = list.reduce((s, t) => s + (t.type === "income" ? t.amount : -t.amount), 0);
     return { id: a.id, name: a.name, bank: a.bank, balance: round2(balance), entries: list.length };
   });
+  const dates = txs.map((t) => t.date).filter(Boolean).sort();
+  const from = dates[0] ?? "";
+  const to = dates[dates.length - 1] ?? "";
+  const days = Math.max(1, dates.length ? daySpan(from, to) : 1);
+  const needsIds = new Set(["housing", "groceries", "transport", "utilities", "health", "tax", "education"]);
+  const wantsIds = new Set(["dining", "drinks", "entertainment", "shopping", "travel", "subscriptions"]);
+  const saveIds = new Set(["investing", "savings"]);
+  let needs = 0;
+  let wants = 0;
+  let save = 0;
+  for (const t of lived.filter((x) => x.type === "expense")) {
+    if (needsIds.has(t.categoryId)) needs += t.amount;
+    else if (wantsIds.has(t.categoryId)) wants += t.amount;
+    else if (saveIds.has(t.categoryId)) save += t.amount;
+  }
   const recent = [...txs]
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
     .slice(0, 24)
@@ -67,6 +82,14 @@ export function buildSnapshot(state: LedgerState) {
     }));
   return {
     currency: state.settings.currency,
+    from,
+    to,
+    days,
+    annualizedIncome: annualize(income, days),
+    monthlySpend: round2((expense * 30) / days),
+    needs: round2(needs),
+    wants: round2(wants),
+    save: round2(save),
     livedIncome: round2(income),
     livedSpend: round2(expense),
     net: round2(income - expense),
@@ -101,6 +124,13 @@ export type CoveSnapshot = ReturnType<typeof buildSnapshot>;
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
+}
+
+function daySpan(from: string, to: string) {
+  const a = Date.parse(from);
+  const b = Date.parse(to);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return 1;
+  return Math.max(1, Math.round((b - a) / 86_400_000) + 1);
 }
 
 function validCat(id?: string) {
@@ -287,20 +317,122 @@ export function formatSnapshotBrief(snap: CoveSnapshot) {
   return lines.filter(Boolean).join("\n");
 }
 
-export function answerFromSnapshot(question: string, snap: CoveSnapshot) {
-  const q = question.toLowerCase();
+export function answerFromSnapshot(question: string, snap: CoveSnapshot, txs: Transaction[] = []) {
+  const q = question.toLowerCase().replace(/[’']/g, "'");
   const c = snap.currency;
-  const taxQ = q.match(/(?:tax|take-?home|take home).{0,20}?(\d[\d,]*(?:\.\d+)?)/) || q.match(/(\d[\d,]*(?:\.\d+)?).{0,12}(gross|salary|a year)/);
-  if (/(tax|kiwisaver|take-?home|paye|ird)/.test(q) && taxQ) {
+  const m = (n: number) => money(n, c);
+
+  const gstQ = q.match(/gst (?:on|of|in|for|from)?\s*\$?([\d,]+(?:\.\d{1,2})?)/) || q.match(/(?:add|plus|including) gst (?:to |on )?\$?([\d,]+(?:\.\d{1,2})?)/);
+  if (gstQ) {
+    const n = parseMoneyish(gstQ[1]);
+    if (n && n > 0) {
+      if (/add|plus|including|exclusive/.test(q)) {
+        return `${n.toFixed(2)} + 15% GST = ${gstInclusive(n).toFixed(2)} (GST ${(gstInclusive(n) - n).toFixed(2)}).`;
+      }
+      return `If ${n.toFixed(2)} is GST-inclusive, GST is ${gstPortion(n).toFixed(2)} and the exclusive amount is ${gstExclusive(n).toFixed(2)}. If it is exclusive, add GST to get ${gstInclusive(n).toFixed(2)}.`;
+    }
+  }
+
+  const taxQ =
+    q.match(/(?:student loan|sl repay).{0,24}?(\d[\d,]*(?:\.\d+)?)/) ||
+    q.match(/(?:tax|take-?home|take home|paye|kiwisaver).{0,24}?(\d[\d,]*(?:\.\d+)?)/) ||
+    q.match(/(\d[\d,]*(?:\.\d+)?).{0,16}(gross|salary|a year|annum)/);
+  if (taxQ) {
     const gross = parseMoneyish(taxQ[1] ?? taxQ[0]);
-    if (gross && gross >= 1000) return explainTax(gross);
+    if (gross && gross >= 1000) {
+      if (/student loan|sl repay/.test(q)) {
+        const sl = takeHome(gross, 0.035, true);
+        return `Student loan on $${gross.toLocaleString("en-NZ")}: 12% of income above $24,128 = $${sl.studentLoan.toLocaleString("en-NZ")} a year. Combined with PAYE, ACC and 3.5% KiwiSaver, take-home about ${m(sl.net)} a year.`;
+      }
+      return explainTax(gross, 0.035, /student loan/.test(q));
+    }
   }
-  if (/emergency fund/.test(q) && snap.livedSpend) {
-    const monthly = snap.livedSpend;
-    return `Using your lived spend of ${money(monthly, c)} in this ledger window, a 3-month emergency fund is about ${money(monthly * 3, c)} and 6 months is ${money(monthly * 6, c)}. Transfers between your own accounts are not counted.`;
+
+  if (/(tax|take-?home|paye).*(salary|income|mine|my pay|books|ledger)|tax on (my )?(salary|income)/.test(q) && snap.annualizedIncome >= 1000) {
+    return `Your books show about ${m(snap.livedIncome)} lived income over ${snap.days} day${snap.days === 1 ? "" : "s"} (annualised ${m(snap.annualizedIncome)}). ${explainTax(snap.annualizedIncome)}`;
   }
-  if (/savings rate|how am i doing|overspend/.test(q)) {
-    return `Lived income ${money(snap.livedIncome, c)}, lived spend ${money(snap.livedSpend, c)}, net ${money(snap.net, c)}${snap.savingsRate != null ? `, savings rate ${snap.savingsRate}%` : ""}. ${snap.transferred ? `${money(snap.transferred, c)} was only moved between accounts.` : ""}`;
+
+  if (/emergency fund|rainy day|cash buffer/.test(q) && (snap.livedSpend || snap.monthlySpend)) {
+    const monthly = snap.monthlySpend || snap.livedSpend;
+    return `Using lived spend of ${m(monthly)} per 30 days in this ledger, a 3-month emergency fund is about ${m(monthly * 3)} and 6 months is ${m(monthly * 6)}. Transfers between your own accounts are not counted.`;
   }
+
+  if (/50\s*\/\s*30\s*\/\s*20|50-30-20/.test(q)) {
+    const base = snap.livedIncome || 0;
+    const s = split503020(base);
+    return `50/30/20 on lived income of ${m(base)} in this window: needs ${m(s.needs)}, wants ${m(s.wants)}, save ${m(s.save)}. Your books: needs ${m(snap.needs)}, wants ${m(snap.wants)}, investing/savings ${m(snap.save)}.`;
+  }
+
+  if (/mortgage|how much (house|rent) can i|home loan/.test(q) && snap.annualizedIncome) {
+    const monthly = takeHome(snap.annualizedIncome).monthly;
+    const band = mortgageComfort(monthly);
+    return `Annualised from your books, take-home is about ${m(monthly)} a month. A 25% housing band is ${m(band.conservative)}; 30% is ${m(band.stretch)}. Banks use their own test — this is only a comfort check.`;
+  }
+
+  if (/savings rate|how am i doing|overspend|am i ok|health (of )?my (money|books)/.test(q)) {
+    const cut = snap.categories.filter((x) => ["dining", "drinks", "entertainment", "shopping"].includes(x.id));
+    const hint = cut.length
+      ? ` Biggest flex lines: ${cut.slice(0, 3).map((x) => `${x.name} ${m(x.amount)}`).join(", ")}.`
+      : "";
+    return `Lived income ${m(snap.livedIncome)}, lived spend ${m(snap.livedSpend)}, net ${m(snap.net)}${snap.savingsRate != null ? `, savings rate ${snap.savingsRate}%` : ""}. ${snap.transferred ? `${m(snap.transferred)} was only moved between accounts.` : ""}${hint}`;
+  }
+
+  if (/what should i cut|where can i save|reduce spend/.test(q)) {
+    const flex = snap.categories.filter((x) => ["dining", "drinks", "entertainment", "shopping", "subscriptions"].includes(x.id) && x.amount > 0);
+    if (!flex.length) return "I don’t see dining, cafés, leisure, shopping or subscriptions in this window. Import a statement or log those payees and I’ll point at the fat.";
+    return `Cut from the flexible lines first:\n${flex.map((x) => `• ${x.name} · ${m(x.amount)}`).join("\n")}\nNeeds (housing, groceries, transport, utilities) are harder to move overnight.`;
+  }
+
+  const afford = q.match(/can i afford (?:\$)?([\d,]+(?:\.\d{1,2})?)/) || q.match(/afford (?:\$)?([\d,]+(?:\.\d{1,2})?)/);
+  if (afford) {
+    const want = parseMoneyish(afford[1]);
+    if (want) {
+      const leftover = snap.net;
+      const ok = leftover >= want;
+      return `${ok ? "Yes, on these books" : "Tight"}. Lived net in this window is ${m(leftover)}. ${want.toFixed(2)} is ${ok ? "inside" : "above"} that. After a 3-month emergency fund (${m((snap.monthlySpend || snap.livedSpend) * 3)}) is filled, extras are safer.`;
+    }
+  }
+
+  if (/budget/.test(q) && snap.budgets.length && !/set |make |change |update /.test(q)) {
+    const lines = snap.budgets.map((b) => {
+      const spent = snap.categories.find((x) => x.id === b.categoryId)?.amount ?? 0;
+      return `• ${b.name}: ${m(spent)} of ${m(b.amount)}`;
+    });
+    return `Budgets vs this ledger window:\n${lines.join("\n")}`;
+  }
+
+  const tail = (q.match(/(?:on|at|for|to)\s+(.+?)\??$/) || [])[1]?.replace(/^(my|the)\s+/, "").trim() ?? "";
+  const catId = resolveCategoryAlias(q.replace(/how much(?: did i)?(?: spend| pay)?(?: on| at| for)?/g, "").replace(/[?]/g, "").trim())
+    || resolveCategoryAlias(tail);
+  if (catId && /how much|spent|spend|total|what.+on/.test(q)) {
+    const row = snap.categories.find((x) => x.id === catId);
+    const amount = row?.amount ?? 0;
+    return `${getCategory(catId).name}: ${m(amount)} in this ledger window${amount ? "" : " (nothing tagged yet)"}.`;
+  }
+
+  if (txs.length && /how much|spent|spend|paid|pay|sent|total/.test(q)) {
+    const needle = (q.match(/(?:to|on|at|from|for)\s+(.+?)\??$/) || q.match(/how much(?: is| was)?\s+(.+?)\??$/))?.[1]
+      ?.replace(/^(my|the)\s+/, "")
+      .trim();
+    if (needle && needle.length > 1) {
+      const n = needle.toLowerCase();
+      const hits = txs.filter(
+        (t) => t.note.toLowerCase().includes(n) || (t.counterparty ?? "").toLowerCase().includes(n) || t.categoryId === resolveCategoryAlias(n),
+      );
+      if (hits.length) {
+        const out = hits.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+        const inn = hits.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
+        const bits = [];
+        if (out) bits.push(`${m(out)} out`);
+        if (inn) bits.push(`${m(inn)} in`);
+        return `${prettyPayee(needle)}: ${bits.join(", ")} across ${hits.length} ${hits.length === 1 ? "entry" : "entries"}.`;
+      }
+    }
+  }
+
+  if (/biggest|top (payee|spend|expense)/.test(q) && snap.payees.length) {
+    return `Largest payees: ${snap.payees.slice(0, 6).map((p) => `${p.name} ${m(p.amount)}`).join("; ")}.`;
+  }
+
   return null;
 }

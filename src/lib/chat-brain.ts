@@ -11,6 +11,7 @@ import {
   transferFlows,
 } from "./intelligence";
 import { answerFromSnapshot, buildSnapshot, formatSnapshotBrief } from "./cove-expert";
+import { formatCards, retrieveKnowledge } from "./cove-knowledge";
 import { explainTax, parseMoneyish } from "./nz-finance";
 import type { BankAccount, Budget, CoveFact, MemoryRule, RecurringBill, Settings, Transaction } from "./types";
 import { todayISO, uid } from "./utils";
@@ -84,7 +85,7 @@ export function interpretChat(input: string, ctx: BrainContext): BrainEffect {
     return { reply: "Cove here — I can see your ledger and NZ money rules. What do you want to know or change?" };
   }
 
-  const grounded = answerFromSnapshot(text, snap);
+  const grounded = answerFromSnapshot(text, snap, ctx.transactions);
   if (grounded) return { reply: grounded };
 
   const taxBare = q.match(/^(?:what(?:'s| is)|calculate|estimate)?\s*(?:the )?nzd? (?:income )?tax (?:on |for )\$?([\d,]+)/i)
@@ -271,21 +272,24 @@ export function interpretChat(input: string, ctx: BrainContext): BrainEffect {
     return { reply: `Forgot the rule for “${dropped?.pattern}”.`, rules, transactions };
   }
 
-  if (/kiwisaver|pir\b|emergency fund|50\/30\/20/.test(q)) {
-    const extra = answerFromSnapshot("emergency fund", snap);
-    return {
-      reply: `${extra ? extra + "\n\n" : ""}From 1 April 2026 the default KiwiSaver rate is 3.5% employee + 3.5% employer. Government contribution is 25c per $1 you put in, capped at $260.72, and stops above $180k income. PIE funds (Sharesies etc.) use PIR 10.5 / 17.5 / 28%.`,
-    };
+  const isQuestion = /\?|^(what|how|why|should|can|do|does|is|are|when|where|who|which|explain|tell|calculate|estimate|compare)\b/.test(q);
+  const cards = retrieveKnowledge(text, isQuestion ? 3 : 2);
+  if (isQuestion && cards.length) {
+    const extra = formatSnapshotBrief(snap);
+    return { reply: `${formatCards(cards)}${snap.entryCount ? `\n\nYour books: ${extra.split("\n")[0]}.` : ""}` };
   }
 
-  const classified = classifyNote(text, "expense", ctx.rules);
-  if (classified.categoryId !== "other") {
-    return {
-      reply: `I would file that under ${getCategory(classified.categoryId).name}. Say “${prettyPayee(text)} is …” if that’s wrong, or ask a full question and I’ll use your live books.`,
-    };
+  if (!isQuestion) {
+    const classified = classifyNote(text, "expense", ctx.rules);
+    if (classified.categoryId !== "other") {
+      return {
+        reply: `I would file that under ${getCategory(classified.categoryId).name}. Say “${prettyPayee(text)} is …” if that’s wrong, or ask a full question and I’ll use your live books.`,
+      };
+    }
   }
 
+  const extra = cards.length ? `\n\n${formatCards(cards.slice(0, 1))}` : "";
   return {
-    reply: `Here’s what I can see in your books right now:\n${formatSnapshotBrief(snap)}\n\nI run inside Cove, not an outside model. Ask “how am I doing?”, “tax on 90000”, set a budget, or teach me a payee.`,
+    reply: `Here’s what I can see in your books right now:\n${formatSnapshotBrief(snap)}\n\nAsk “how am I doing?”, “tax on 90000”, “GST on 115”, set a budget, or teach me a payee.${extra}`,
   };
 }
