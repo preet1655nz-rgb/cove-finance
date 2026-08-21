@@ -50,7 +50,9 @@ function Dashboard() {
     <div className="space-y-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-[13px] text-muted-foreground">Good to see you, {name}</p>
+          <p className="text-[13px] text-muted-foreground">
+            {name.trim() ? `Good to see you, ${name}` : "A clean start"}
+          </p>
           <h1 className="mt-1 font-display text-3xl tracking-tight sm:text-4xl">Overview</h1>
         </div>
         <PeriodSelect value={period} onChange={setPeriod} />

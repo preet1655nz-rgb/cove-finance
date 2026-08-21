@@ -30,6 +30,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const setSettingsOpen = useFinanceStore((s) => s.setSettingsOpen);
 
   useEffect(() => {
+    try {
+      window.localStorage.removeItem("cove-finance-v1");
+    } catch {
+      /* private mode */
+    }
     const result = useFinanceStore.persist.rehydrate();
     void Promise.resolve(result).finally(() => {
       useFinanceStore.getState().refreshNotices();

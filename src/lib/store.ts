@@ -3,7 +3,7 @@ import { persist } from "zustand/middleware";
 import { getCategory } from "./categories";
 import { buildNotices } from "./notify";
 import { spentInCategory } from "./period";
-import { buildSeed } from "./seed";
+import { buildSeed, defaultSettings } from "./seed";
 import { txFingerprint } from "./statement";
 import type { Budget, Notice, RecurringBill, Settings, Transaction, TxType } from "./types";
 import { endOfMonth, startOfMonth, todayISO, uid } from "./utils";
@@ -78,16 +78,14 @@ function withNotices(partial: Partial<FinanceState> & Pick<FinanceState, "transa
   };
 }
 
-const seed = buildSeed();
-
 export const useFinanceStore = create<FinanceState>()(
   persist(
     (set, get) => ({
-      transactions: seed.transactions,
-      budgets: seed.budgets,
-      bills: seed.bills,
+      transactions: [],
+      budgets: [],
+      bills: [],
       notices: [],
-      settings: seed.settings,
+      settings: defaultSettings,
       period: "this-month",
       addOpen: false,
       settingsOpen: false,
@@ -308,7 +306,7 @@ export const useFinanceStore = create<FinanceState>()(
       },
     }),
     {
-      name: "cove-finance-v1",
+      name: "cove-finance-v2",
       skipHydration: true,
       partialize: (s) => ({
         transactions: s.transactions,

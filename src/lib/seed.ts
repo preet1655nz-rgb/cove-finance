@@ -36,7 +36,7 @@ function tx(
 }
 
 export const defaultSettings: Settings = {
-  displayName: "Alex",
+  displayName: "",
   currency: "NZD",
   browserNotifications: false,
   budgetAlertPct: 80,
