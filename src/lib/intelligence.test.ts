@@ -15,10 +15,9 @@ test("Sharesies is investing, not other or savings", () => {
   assert.equal(hit.categoryId, "investing");
 });
 
-test("Westpac savings bill payment is a transfer out", () => {
+test("Westpac savings bill payment is savings, not a transfer", () => {
   const hit = classifyNote("BP guri wstpac saving", "expense");
-  assert.equal(hit.categoryId, "transfer-out");
-  assert.equal(hit.transfer?.otherLabel, "Westpac savings");
+  assert.equal(hit.categoryId, "savings");
 });
 
 test("IRD IIT debit is tax, wage credit is salary", () => {
@@ -45,16 +44,18 @@ test("this household statement tags rent, power, insurance, and internal transfe
   assert.equal(classifyNote("DD DEBITSUCCESS JANSSENS INS JNSN835675", "expense").categoryId, "insurance");
   assert.equal(classifyNote("VT Pak n Save M 483561", "expense").categoryId, "groceries");
   assert.equal(classifyNote("VT IN A SPIN LA", "expense").categoryId, "household");
-  assert.equal(classifyNote("VT LOGMATE* LOG", "expense").categoryId, "household");
+  assert.equal(classifyNote("VT LOGMATE* LOG", "expense").categoryId, "transport");
   assert.equal(classifyNote("VT ESPRESSO STU", "expense").categoryId, "drinks");
   assert.equal(classifyNote("VT BP CONNECT D", "expense").categoryId, "transport");
   assert.equal(classifyNote("AP SAINI,GURPREE DEPOSIT", "income").categoryId, "transfer-in");
   assert.equal(classifyNote("DC 06-0807-0355363-00 CREDIT TRANSFER 195312", "income").categoryId, "transfer-in");
   assert.equal(classifyNote("DD 06-0807-0355363-00 DEBIT TRANSFER 140731", "expense").categoryId, "transfer-out");
   assert.equal(classifyNote("WESTPAC · INTEREST", "income").categoryId, "investments");
-  assert.equal(classifyNote("DD 01-0798-0922177-00 Electri", "expense").categoryId, "utilities");
+  assert.equal(classifyNote("DD 01-0798-0922177-00 Electri", "expense").categoryId, "transfer-out");
   assert.equal(classifyNote("DC 06-0807-0355363-00 Electri", "income").categoryId, "transfer-in");
   assert.equal(classifyNote("DC 06-0807-0355363-00 Rent", "income").categoryId, "transfer-in");
+  assert.equal(classifyNote("AP Gem Visa saini gurpre", "expense").categoryId, "credit-card");
+  assert.equal(classifyNote("BP guri wstpac saving", "expense").categoryId, "savings");
   assert.equal(classifyNote("DR INTEREST", "expense").categoryId, "other");
 });
 
@@ -115,5 +116,8 @@ test("ANZ sample CSV tags Sharesies and savings transfers", () => {
   assert.ok(shares.every((r) => r.categoryId === "investing"));
   const west = parsed.rows.filter((r) => /wstpac sav/i.test(r.note));
   assert.ok(west.length >= 1);
-  assert.ok(west.every((r) => r.categoryId === "transfer-out"));
+  assert.ok(west.every((r) => r.categoryId === "savings"));
+  const gem = parsed.rows.filter((r) => /gem visa/i.test(r.note));
+  assert.ok(gem.length >= 1);
+  assert.ok(gem.every((r) => r.categoryId === "credit-card"));
 });

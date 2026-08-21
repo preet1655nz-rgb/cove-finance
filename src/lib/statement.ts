@@ -1037,5 +1037,5 @@ export function categorize(note: string, type: TxType, rules: MemoryRule[] = [])
 }
 
 export function categoriesForSelect(type: TxType) {
-  return CATEGORIES.filter((c) => c.type === type);
+  return CATEGORIES.filter((c) => c.type === type && c.id !== "transfer-in" && c.id !== "transfer-out");
 }

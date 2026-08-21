@@ -316,7 +316,7 @@ function assertAnzGo(result: ReturnType<typeof parseBankStatement>, label: strin
   const power = result.rows.find((r) => /electri/i.test(r.note));
   assert.ok(power);
   assert.equal(power!.type, "expense");
-  assert.equal(power!.categoryId, "utilities");
+  assert.equal(power!.categoryId, "transfer-out");
 
   const shop = result.rows.find((r) => /warehouse/i.test(r.note) && r.amount === 8.99);
   assert.ok(shop);
@@ -371,6 +371,10 @@ test("real ANZ Go pages 2–3 keep page totals and ignore the footer", () => {
   assert.equal(result.rows.find((r) => /perfume/i.test(r.note))?.categoryId, "shopping");
   assert.equal(result.rows.find((r) => /didi/i.test(r.note) && r.amount === 228.44)?.categoryId, "gig");
   assert.equal(result.rows.find((r) => /uber bv/i.test(r.note) && r.amount === 495.74)?.categoryId, "gig");
+  assert.equal(result.rows.find((r) => /electri/i.test(r.note))?.categoryId, "transfer-out");
+  assert.equal(result.rows.find((r) => /01-0798-0922177-00 Rent/i.test(r.note))?.categoryId, "transfer-out");
+  assert.ok(result.rows.filter((r) => /gem visa/i.test(r.note)).every((r) => r.categoryId === "credit-card"));
+  assert.ok(result.rows.filter((r) => /wstpac sav/i.test(r.note)).every((r) => r.categoryId === "savings"));
   assert.equal(result.rows.filter((r) => r.categoryId === "other").length, 0);
 });
 

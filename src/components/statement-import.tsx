@@ -20,6 +20,7 @@ import {
   type StatementDraft,
 } from "@/lib/statement";
 import { classifyNote, inferAccountMeta } from "@/lib/intelligence";
+import { isTransferCategory } from "@/lib/categories";
 import { useFinanceStore } from "@/lib/store";
 import type { TxType } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -73,13 +74,21 @@ export function StatementImport() {
     }
     setError(null);
     setNeedsPassword(false);
-    setWarnings(result.warnings);
-    setSkipped(result.skipped);
     const tagged = result.rows.map((r) => {
       const hit = classifyNote(r.note, r.type, useFinanceStore.getState().rules);
       return { ...r, categoryId: hit.categoryId };
     });
-    setRows(applyDuplicates(tagged, useFinanceStore.getState().transactions));
+    const transfers = tagged.filter((r) => isTransferCategory(r.categoryId));
+    const living = tagged.filter((r) => !isTransferCategory(r.categoryId));
+    setRows(applyDuplicates(living, useFinanceStore.getState().transactions));
+    setSkipped(result.skipped + transfers.length);
+    const warnings = [...result.warnings];
+    if (transfers.length) {
+      warnings.push(
+        `${transfers.length} transfer${transfers.length === 1 ? "" : "s"} between your accounts skipped — only income and expenses are imported.`,
+      );
+    }
+    setWarnings(warnings);
     const inferred = inferAccountMeta(result.format, result.format, result.rows.map((r) => r.note));
     const existing = useFinanceStore.getState().accounts.find((a) => a.bank === inferred.bank);
     if (existing) setAccountId(existing.id);
@@ -198,7 +207,7 @@ export function StatementImport() {
         <DialogHeader>
           <DialogTitle>Upload statement</DialogTitle>
           <DialogDescription>
-            PDF, CSV, OFX or QIF from any New Zealand bank. Every page is read — there is no page or size cap.
+            PDF, CSV, OFX or QIF from any New Zealand bank. Income and expenses only — transfers between your accounts are skipped.
           </DialogDescription>
         </DialogHeader>
 

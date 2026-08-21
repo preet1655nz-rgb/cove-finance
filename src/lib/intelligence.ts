@@ -20,28 +20,27 @@ export const BUILTIN_RULES: { re: RegExp; id: string }[] = [
   { re: /\b(uber eats|deliveroo|menulog|doordash|mcdonald|kfc|subway|dominos|pizza|burger|restaurant|bistro|kitchen|takeaway|amano|coco'?s|orphans|sweets)\b/i, id: "dining" },
   { re: /\b(allpress|starbucks|coffee|caf[eé]|espresso|l'?affare|gloria jean)\b/i, id: "drinks" },
   { re: /\b(netflix|spotify|icloud|disney|youtube|apple\.com\/bill|google one|dropbox|subscription)\b/i, id: "subscriptions" },
-  { re: /\b(waitomo|bp connect|z energy|mobil|shell|gull |challenge |petrol|gasoline|at hop|auckland transport|uber trip|uber *rides|lyft|parking|wilson parking|transit)\b/i, id: "transport" },
+  { re: /\b(waitomo|bp connect|z energy|mobil|shell|gull |challenge |petrol|gasoline|at hop|auckland transport|uber trip|uber *rides|lyft|parking|wilson parking|transit|logmate)\b/i, id: "transport" },
   { re: /\b(genesis|mercury|contact energy|meridian|powershop|vector|watercare|spark|one new zealand|onenewzealand|one nz|2degrees|vodafone|chorus|fibre|broadband|internet|power|electri)\b/i, id: "utilities" },
   { re: /\b(pharmacy|chemist|physio|doctor|hospital|dental|dentist|cityfitness|city fitness|sprint fit|les mills|snap fitness|anytime fitness|gym)\b|\b(?:gp|acc)\b/i, id: "health" },
   { re: /\b(debit ?success|janssens?|southern cross|aia |aa insurance|insurance)\b/i, id: "insurance" },
   { re: /\b(airbnb|booking\.com|air new zealand|air nz|jetstar|qantas|hotel|motel|flight)\b/i, id: "travel" },
   { re: /\b(uniqlo|zara|h&m|kmart|warehous(?:e)?|amazon|cotton on|country road|two dollar|wsl eastgate|farmers|briscoes|perfume|rebel sport)\b/i, id: "shopping" },
-  { re: /\b(in a spin|logmate|laundr|bunnings|mitre ?10)\b/i, id: "household" },
+  { re: /\b(in a spin|laundr|bunnings|mitre ?10)\b/i, id: "household" },
+  { re: /\b(gem visa|gemvisa)\b/i, id: "credit-card" },
   { re: /\b(unarranged overdraft|overdraft fee)\b/i, id: "other" },
   { re: /\b(cinema|event cinemas|ticketmaster|concert|academy cinema|aotea)\b/i, id: "entertainment" },
   { re: /\b(university|course|udemy|workbook|tuition)\b/i, id: "education" },
-  { re: /\b(kiwisaver|emergency fund)\b/i, id: "savings" },
+  { re: /\b(kiwisaver|emergency fund)\b|wstpac sav|westpac sav/i, id: "savings" },
 ];
 
 
 const OWN_ACCOUNT_HINTS: { re: RegExp; label: string; bank?: string; investing?: boolean }[] = [
   { re: /sharesies/i, label: "Sharesies", investing: true },
   { re: /hatch|investnow|kernel|smartshares/i, label: "Investment account", investing: true },
-  { re: /wstpac sav|westpac sav|wstpac saving/i, label: "Westpac savings", bank: "westpac" },
   { re: /westpac/i, label: "Westpac", bank: "westpac" },
   { re: /asb joint|asb /i, label: "ASB joint", bank: "asb" },
   { re: /\basb\b/i, label: "ASB", bank: "asb" },
-  { re: /gem visa/i, label: "Gem Visa", bank: "other" },
   { re: /guri self|gurpreet joint|gurpreet|\bgurpree|\bsaini\b/i, label: "Saini" },
   { re: /\b\d{2}-\d{4}-\d{7}-\d{2}\b/, label: "Other ANZ account", bank: "anz" },
   { re: /kiwibank/i, label: "Kiwibank", bank: "kiwibank" },
@@ -49,6 +48,8 @@ const OWN_ACCOUNT_HINTS: { re: RegExp; label: string; bank?: string; investing?:
   { re: /\btsb\b/i, label: "TSB", bank: "tsb" },
   { re: /debit transfer|credit transfer/i, label: "Internal transfer" },
 ];
+
+const NZ_ACCOUNT = /\b\d{2}-\d{4}-\d{7}-\d{2}\b/;
 
 export function normalizePayee(note: string) {
   return note
@@ -110,8 +111,16 @@ export function classifyNote(
     return { categoryId: "investing", counterparty: own.label };
   }
 
-  // Merchants and income words win over a bank name / account number, so
-  // "WESTPAC INTEREST" is investment income and "Electri" is power — not a transfer.
+  // Account-to-account is a transfer even if the reference says Electri or Rent.
+  if (NZ_ACCOUNT.test(note) && !/\b(interest|dividend)\b/i.test(note)) {
+    const direction = type === "income" ? "in" : "out";
+    return {
+      categoryId: direction === "in" ? "transfer-in" : "transfer-out",
+      transfer: { direction, otherLabel: own?.label || "Other ANZ account" },
+      counterparty: own?.label || "Other ANZ account",
+    };
+  }
+
   const merchantNote = stripBankCode(note);
   for (const rule of BUILTIN_RULES) {
     if (!rule.re.test(merchantNote) && !rule.re.test(note)) continue;
@@ -122,6 +131,8 @@ export function classifyNote(
     if (rule.id === "tax" && type === "expense") return { categoryId: "tax", counterparty };
     if (rule.id === "salary" && type === "income") return { categoryId: "salary", counterparty };
     if (rule.id === "gig" && type === "income") return { categoryId: "gig", counterparty };
+    if (rule.id === "credit-card" && type === "expense") return { categoryId: "credit-card", counterparty };
+    if (rule.id === "savings" && type === "expense") return { categoryId: "savings", counterparty };
   }
 
   if (own && (type === "expense" || type === "income") && !own.investing) {
@@ -281,6 +292,10 @@ export const CATEGORY_ALIASES: Record<string, string> = {
   bills: "utilities",
   utilities: "utilities",
   power: "utilities",
+  "credit card": "credit-card",
+  creditcard: "credit-card",
+  visa: "credit-card",
+  logmate: "transport",
   sub: "subscriptions",
   subscriptions: "subscriptions",
   netflix: "subscriptions",
