@@ -98,11 +98,15 @@ export function CategoryDonut({
   currency,
   kind = "expense",
   showAmounts = false,
+  selectedId = null,
+  onSelect,
 }: {
   txs: Transaction[];
   currency: string;
   kind?: "expense" | "income";
   showAmounts?: boolean;
+  selectedId?: string | null;
+  onSelect?: (id: string | null) => void;
 }) {
   const mounted = useMounted();
   const data = useMemo(() => {
@@ -135,9 +139,30 @@ export function CategoryDonut({
     <div className="grid h-[220px] grid-cols-[140px_1fr] items-center gap-2">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
-          <Pie data={data} dataKey="value" nameKey="name" innerRadius={42} outerRadius={62} paddingAngle={2} stroke="none">
-            {data.map((_, i) => (
-              <Cell key={i} fill={CHART[i % CHART.length]} />
+          <Pie
+            data={data}
+            dataKey="value"
+            nameKey="name"
+            innerRadius={42}
+            outerRadius={62}
+            paddingAngle={2}
+            stroke="none"
+            cursor={onSelect ? "pointer" : undefined}
+            onClick={(_, index) => {
+              if (!onSelect || index == null || index < 0) return;
+              const row = data[index];
+              if (!row) return;
+              onSelect(selectedId === row.id ? null : row.id);
+            }}
+          >
+            {data.map((d, i) => (
+              <Cell
+                key={d.id}
+                fill={CHART[i % CHART.length]}
+                opacity={selectedId && selectedId !== d.id ? 0.35 : 1}
+                stroke={selectedId === d.id ? "var(--color-foreground)" : "none"}
+                strokeWidth={selectedId === d.id ? 2 : 0}
+              />
             ))}
           </Pie>
           <Tooltip content={<ChartTip currency={currency} />} />
@@ -145,14 +170,21 @@ export function CategoryDonut({
       </ResponsiveContainer>
       <ul className="space-y-1.5 pr-2">
         {data.map((d, i) => (
-          <li key={d.id} className="flex items-center justify-between gap-2 text-[12px]">
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="size-1.5 shrink-0 rounded-full" style={{ background: CHART[i % CHART.length] }} />
-              <span className="truncate">{d.name}</span>
-            </span>
-            <span className="tabular-nums text-muted-foreground">
-              {showAmounts ? money(d.value, currency, true) : `${Math.round((d.value / total) * 100)}%`}
-            </span>
+          <li key={d.id}>
+            <button
+              type="button"
+              onClick={() => onSelect?.(selectedId === d.id ? null : d.id)}
+              className="flex w-full items-center justify-between gap-2 text-left text-[12px] transition-opacity hover:opacity-100"
+              style={{ opacity: selectedId && selectedId !== d.id ? 0.45 : 1 }}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="size-1.5 shrink-0 rounded-full" style={{ background: CHART[i % CHART.length] }} />
+                <span className="truncate">{d.name}</span>
+              </span>
+              <span className="tabular-nums text-muted-foreground">
+                {showAmounts ? money(d.value, currency, true) : `${Math.round((d.value / total) * 100)}%`}
+              </span>
+            </button>
           </li>
         ))}
       </ul>

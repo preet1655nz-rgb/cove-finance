@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { BudgetBars, CategoryDonut, FlowChart } from "@/components/charts";
 import { PageFrame } from "@/components/page-frame";
 import { PeriodSelect } from "@/components/period-select";
@@ -38,6 +38,7 @@ function Insights() {
   const { label, from, to } = range;
   const buckets = cashBuckets(slice);
   const [flow, setFlow] = useState<"expense" | "income">("expense");
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const moved = slice.filter((t) => t.type === "expense" && isTransferTx(t)).reduce((s, t) => s + t.amount, 0);
   const days = Math.max(1, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86400000) + 1);
   const today = todayISO();
@@ -51,6 +52,16 @@ function Insights() {
     lived.filter((t) => t.categoryId === "other" || t.categoryId === "other-income"),
   ).slice(0, 6);
   const people = payeeBreakdown(lived).slice(0, 8);
+
+  const categoryBreakdown = useMemo(() => {
+    if (!selectedCategoryId) return [];
+    return lived
+      .filter((t) => t.categoryId === selectedCategoryId && t.type === flow)
+      .sort((a, b) => (a.date < b.date ? 1 : -1))
+      .slice(0, 40);
+  }, [lived, selectedCategoryId, flow]);
+
+  const categoryTotal = categoryBreakdown.reduce((s, t) => s + t.amount, 0);
 
   const cards = [
     {
@@ -170,7 +181,10 @@ function Insights() {
                 <button
                   key={k}
                   type="button"
-                  onClick={() => setFlow(k)}
+                  onClick={() => {
+                    setFlow(k);
+                    setSelectedCategoryId(null);
+                  }}
                   className={cn(
                     "h-8 rounded-md px-2.5 text-[12px] font-medium capitalize",
                     flow === k ? "bg-card text-foreground shadow-card" : "text-muted-foreground",
@@ -181,7 +195,49 @@ function Insights() {
               ))}
             </div>
           </div>
-          <CategoryDonut txs={lived} currency={currency} kind={flow} showAmounts />
+          <CategoryDonut
+            txs={lived}
+            currency={currency}
+            kind={flow}
+            showAmounts
+            selectedId={selectedCategoryId}
+            onSelect={setSelectedCategoryId}
+          />
+          {selectedCategoryId ? (
+            <div className="mt-5 border-t border-border pt-4">
+              <div className="mb-3 flex items-baseline justify-between gap-3">
+                <h3 className="text-sm font-medium">{getCategory(selectedCategoryId).name} breakdown</h3>
+                <p className="text-[12px] tabular-nums text-muted-foreground">
+                  {categoryBreakdown.length} {categoryBreakdown.length === 1 ? "entry" : "entries"} · {money(categoryTotal, currency)}
+                </p>
+              </div>
+              {categoryBreakdown.length ? (
+                <ul className="max-h-56 space-y-2 overflow-y-auto">
+                  {categoryBreakdown.map((t) => (
+                    <li key={t.id} className="flex items-baseline justify-between gap-3 text-[13px]">
+                      <span className="min-w-0 truncate">
+                        <span className="text-muted-foreground">{t.date}</span>
+                        {" · "}
+                        {t.note || getCategory(t.categoryId).name}
+                      </span>
+                      <span className="shrink-0 tabular-nums">{money(t.amount, currency)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">No entries in this slice for the selected period.</p>
+              )}
+              <button
+                type="button"
+                className="mt-3 text-[12px] text-muted-foreground underline-offset-4 hover:underline"
+                onClick={() => setSelectedCategoryId(null)}
+              >
+                Clear selection
+              </button>
+            </div>
+          ) : (
+            <p className="mt-3 text-[12px] text-muted-foreground">Tap a slice or label to see every entry in that category.</p>
+          )}
         </section>
         <section className="rounded-xl bg-card p-5 shadow-card">
           <h2 className="mb-2 text-sm font-medium">Payees · {label}</h2>

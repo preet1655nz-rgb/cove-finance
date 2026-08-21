@@ -2,8 +2,6 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { getCategory, setCustomCategories } from "./categories";
 import { interpretChat, type PendingIntent } from "./chat-brain";
-import { askGrokAboutBooks } from "./cove-ai";
-import { buildSnapshot, grokLedgerPayload } from "./cove-expert";
 import { applyRulesToTxs, classifyNote, pairTransfers } from "./intelligence";
 import { buildNotices, maybeBrowserNotify } from "./notify";
 import { spentInCategory } from "./period";
@@ -392,26 +390,13 @@ export const useFinanceStore = create<FinanceState>()(
         };
         const compact = (next: Partial<FinanceState>) =>
           Object.fromEntries(Object.entries(next).filter(([, v]) => v !== undefined)) as Partial<FinanceState>;
+        // Fully local: interpretChat already analyses the ledger, asks clarifying
+        // questions, and mutates entries. No external LLM / xAI dependency.
         const effect = interpretChat(trimmed, {
           ...ledger,
           currency: s.settings.currency,
         });
-        let reply = effect.reply;
-        if (effect.needsAi || effect.handled === false) {
-          try {
-            const snap = buildSnapshot(ledger);
-            const grok = await askGrokAboutBooks({
-              data: {
-                question: trimmed,
-                snapshot: JSON.stringify(grokLedgerPayload(snap)),
-                history: get().chat.slice(-16).map((m) => ({ role: m.role, text: m.text })),
-              },
-            });
-            if (grok.ok && grok.text) reply = grok.text;
-          } catch {
-            /* local analysis already in effect.reply */
-          }
-        }
+        const reply = effect.reply;
         const cove: ChatMessage = { id: uid(), role: "cove", text: reply, at: new Date().toISOString() };
         const chat = [...get().chat, cove].slice(-60);
         const patch = compact({
@@ -471,4 +456,3 @@ export function monthSpent(categoryId: string) {
   const today = todayISO();
   return spentInCategory(txs, categoryId, startOfMonth(today), endOfMonth(today));
 }
-
