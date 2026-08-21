@@ -96,33 +96,40 @@ export function FlowChart({ txs, currency }: { txs: Transaction[]; currency: str
 export function CategoryDonut({
   txs,
   currency,
+  kind = "expense",
+  showAmounts = false,
 }: {
   txs: Transaction[];
   currency: string;
+  kind?: "expense" | "income";
+  showAmounts?: boolean;
 }) {
   const mounted = useMounted();
   const data = useMemo(() => {
     const map = new Map<string, number>();
-    for (const t of txs.filter(
-      (t) =>
-        t.type === "expense" &&
-        t.categoryId !== "transfer-out" &&
-        t.categoryId !== "transfer-in" &&
-        t.categoryId !== "investing" &&
-        t.categoryId !== "savings" &&
-        t.categoryId !== "credit-card",
-    )) {
+    for (const t of txs.filter((t) => {
+      if (t.type !== kind) return false;
+      if (t.categoryId === "transfer-out" || t.categoryId === "transfer-in") return false;
+      if (kind === "expense" && (t.categoryId === "investing" || t.categoryId === "savings" || t.categoryId === "credit-card" || t.categoryId === "debt")) {
+        return false;
+      }
+      return true;
+    })) {
       map.set(t.categoryId, (map.get(t.categoryId) ?? 0) + t.amount);
     }
     return [...map.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6)
       .map(([id, value]) => ({ id, name: getCategory(id).name, value }));
-  }, [txs]);
+  }, [txs, kind]);
   const total = data.reduce((s, d) => s + d.value, 0);
   if (!mounted) return <div className="h-[220px] rounded-lg bg-muted/50" />;
   if (!data.length) {
-    return <p className="flex h-[220px] items-center justify-center text-sm text-muted-foreground">No spending in this period</p>;
+    return (
+      <p className="flex h-[220px] items-center justify-center text-sm text-muted-foreground">
+        {kind === "income" ? "No income in this period" : "No spending in this period"}
+      </p>
+    );
   }
   return (
     <div className="grid h-[220px] grid-cols-[140px_1fr] items-center gap-2">
@@ -143,7 +150,9 @@ export function CategoryDonut({
               <span className="size-1.5 shrink-0 rounded-full" style={{ background: CHART[i % CHART.length] }} />
               <span className="truncate">{d.name}</span>
             </span>
-            <span className="tabular-nums text-muted-foreground">{Math.round((d.value / total) * 100)}%</span>
+            <span className="tabular-nums text-muted-foreground">
+              {showAmounts ? money(d.value, currency, true) : `${Math.round((d.value / total) * 100)}%`}
+            </span>
           </li>
         ))}
       </ul>

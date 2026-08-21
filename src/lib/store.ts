@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { getCategory } from "./categories";
+import { getCategory, setCustomCategories } from "./categories";
 import { interpretChat, type PendingIntent } from "./chat-brain";
 import { askGrokAboutBooks } from "./cove-ai";
 import { buildSnapshot, grokLedgerPayload } from "./cove-expert";
@@ -10,7 +10,7 @@ import { spentInCategory } from "./period";
 import { buildSeed, defaultSettings } from "./seed";
 import { txFingerprint } from "./statement";
 import { isSampleLedger, LEDGER_KEY } from "./fresh-start";
-import type { BankAccount, Budget, ChatMessage, CoveFact, MemoryRule, Notice, Period, RecurringBill, Settings, Transaction, TxType } from "./types";
+import type { BankAccount, Budget, ChatMessage, CoveFact, CustomCategory, MemoryRule, Notice, Period, RecurringBill, Settings, Transaction, TxType } from "./types";
 import { endOfMonth, startOfMonth, todayISO, uid } from "./utils";
 
 type Draft = {
@@ -38,6 +38,7 @@ type FinanceState = {
   accounts: BankAccount[];
   rules: MemoryRule[];
   facts: CoveFact[];
+  customCategories: CustomCategory[];
   chat: ChatMessage[];
   chatOpen: boolean;
   chatBusy: boolean;
@@ -45,6 +46,8 @@ type FinanceState = {
   importAccountId: string | null;
   settings: Settings;
   period: Period;
+  cycleMode: boolean;
+  cycleOffset: number;
   addOpen: boolean;
   settingsOpen: boolean;
   importOpen: boolean;
@@ -54,6 +57,9 @@ type FinanceState = {
   focusMonth: string | null;
   setHydrated: (v: boolean) => void;
   setPeriod: (p: Period) => void;
+  setCycleMode: (on: boolean) => void;
+  setCycleOffset: (n: number) => void;
+  upsertCustomCategory: (cat: CustomCategory) => void;
   setAddOpen: (open: boolean, preset?: Partial<Draft>) => void;
   setSettingsOpen: (open: boolean) => void;
   setImportOpen: (open: boolean) => void;
@@ -107,6 +113,7 @@ export const useFinanceStore = create<FinanceState>()(
       accounts: [],
       rules: [],
       facts: [],
+      customCategories: [],
       chat: [],
       chatOpen: false,
       chatBusy: false,
@@ -114,6 +121,8 @@ export const useFinanceStore = create<FinanceState>()(
       importAccountId: null,
       settings: defaultSettings,
       period: "this-month",
+      cycleMode: false,
+      cycleOffset: 0,
       addOpen: false,
       settingsOpen: false,
       importOpen: false,
@@ -123,6 +132,13 @@ export const useFinanceStore = create<FinanceState>()(
       focusMonth: null,
       setHydrated: (v) => set({ hydrated: v }),
       setPeriod: (period) => set({ period }),
+      setCycleMode: (cycleMode) => set({ cycleMode, cycleOffset: 0 }),
+      setCycleOffset: (cycleOffset) => set({ cycleOffset: Math.max(0, cycleOffset) }),
+      upsertCustomCategory: (cat) => {
+        const customCategories = [...get().customCategories.filter((c) => c.id !== cat.id), cat];
+        setCustomCategories(customCategories);
+        set({ customCategories });
+      },
       setAddOpen: (open, preset) =>
         set({
           addOpen: open,
@@ -238,7 +254,7 @@ export const useFinanceStore = create<FinanceState>()(
         const next = buildNotices(current.transactions, current.budgets, current.bills, current.notices, current.settings.currency);
         const prevFp = new Set(current.notices.map((n) => n.fingerprint));
         for (const n of next) {
-          if (!prevFp.has(n.fingerprint) && n.kind === "bill") {
+          if (!prevFp.has(n.fingerprint) && (n.kind === "bill" || n.fingerprint.startsWith("cash-negative"))) {
             void maybeBrowserNotify(n, current.settings.browserNotifications);
           }
         }
@@ -264,7 +280,8 @@ export const useFinanceStore = create<FinanceState>()(
           }),
         );
       },
-      clearAll: () =>
+      clearAll: () => {
+        setCustomCategories([]);
         set(
           withNotices({
             ...get(),
@@ -273,8 +290,10 @@ export const useFinanceStore = create<FinanceState>()(
             bills: [],
             notices: [],
             covePending: null,
+            customCategories: [],
           }),
-        ),
+        );
+      },
       importData: (raw) => {
         if (!raw || typeof raw !== "object") return false;
         const data = raw as Record<string, unknown>;
@@ -369,6 +388,7 @@ export const useFinanceStore = create<FinanceState>()(
           facts: s.facts,
           settings: s.settings,
           pending: s.covePending,
+          customCategories: s.customCategories,
         };
         const compact = (next: Partial<FinanceState>) =>
           Object.fromEntries(Object.entries(next).filter(([, v]) => v !== undefined)) as Partial<FinanceState>;
@@ -402,7 +422,9 @@ export const useFinanceStore = create<FinanceState>()(
           bills: effect.bills,
           facts: effect.facts,
           settings: effect.settings,
+          customCategories: effect.customCategories,
         });
+        if (effect.customCategories) setCustomCategories(effect.customCategories);
         const covePending = effect.pending === undefined ? get().covePending : effect.pending;
         if (patch.transactions || patch.budgets || patch.bills) {
           set(withNotices({ ...get(), ...patch, chat, chatBusy: false, covePending, notices: get().notices }));
@@ -427,14 +449,18 @@ export const useFinanceStore = create<FinanceState>()(
         facts: s.facts,
         chat: s.chat,
         covePending: s.covePending,
+        customCategories: s.customCategories,
+        cycleMode: s.cycleMode,
       }),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<FinanceState>;
         if (isSampleLedger(p.transactions)) return current;
+        if (p.customCategories) setCustomCategories(p.customCategories);
         return { ...current, ...p };
       },
       onRehydrateStorage: () => (state) => {
         if (state && isSampleLedger(state.transactions)) state.clearAll();
+        else if (state?.customCategories) setCustomCategories(state.customCategories);
       },
     },
   ),

@@ -39,7 +39,7 @@ export function CoveChat() {
         type="button"
         onClick={() => setOpen(!open)}
         aria-label="Ask Cove"
-        className="fixed right-4 bottom-20 z-40 h-12 rounded-full px-4 shadow-card lg:bottom-6"
+        className="fixed right-4 bottom-4 z-40 h-12 rounded-full px-4 shadow-card lg:bottom-6"
       >
         <MessageCircle className="size-4" />
         Ask Cove

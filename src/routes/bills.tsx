@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { CATEGORIES, getCategory } from "@/lib/categories";
+import { allCategories, getCategory } from "@/lib/categories";
 import { formatDayLong, money } from "@/lib/format";
 import { daysUntil, nextBillDate } from "@/lib/notify";
 import { useFinanceStore } from "@/lib/store";
@@ -19,7 +19,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/bills")({ component: BillsPage });
 
 function emptyForm() {
-  return { name: "", amount: "", dueDate: todayISO(), repeat: "monthly" as "monthly" | "once", categoryId: "utilities" };
+  return { name: "", amount: "", dueDate: todayISO(), repeat: "monthly" as "weekly" | "fortnightly" | "monthly" | "once", categoryId: "utilities" };
 }
 
 function BillsPage() {
@@ -145,7 +145,7 @@ function Bills() {
                 <button type="button" className="min-w-0 flex-1 text-left" onClick={() => startEdit(bill)}>
                   <p className="text-sm font-medium">{bill.name}</p>
                   <p className="text-[12px] text-muted-foreground">
-                    {cat.name} · {bill.repeat === "once" ? "Once" : "Monthly"} · {formatDayLong(due)}
+                    {cat.name} · {bill.repeat === "once" ? "Once" : bill.repeat === "weekly" ? "Weekly" : bill.repeat === "fortnightly" ? "Fortnightly" : "Monthly"} · {formatDayLong(due)}
                     {days <= 3 && bill.enabled ? ` · ${days < 0 ? "overdue" : days === 0 ? "today" : `${days}d`}` : ""}
                   </p>
                 </button>
@@ -194,18 +194,17 @@ function Bills() {
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Repeats</Label>
-              <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
-                {(["monthly", "once"] as const).map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => setForm({ ...form, repeat: r })}
-                    className={`h-9 rounded-md text-sm font-medium capitalize ${form.repeat === r ? "bg-card shadow-card" : "text-muted-foreground"}`}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
+              <Select value={form.repeat} onValueChange={(repeat) => setForm({ ...form, repeat: repeat as typeof form.repeat })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="fortnightly">Fortnightly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="once">Once</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Category</Label>
@@ -214,7 +213,7 @@ function Bills() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CATEGORIES.filter((c) => c.type === "expense" && c.id !== "transfer-out").map((c) => (
+                  {allCategories().filter((c) => c.type === "expense" && c.id !== "transfer-out").map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.name}
                     </SelectItem>

@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
 import { BudgetBars, CategoryDonut, FlowChart } from "@/components/charts";
 import { PageFrame } from "@/components/page-frame";
 import { PeriodSelect } from "@/components/period-select";
@@ -6,9 +7,9 @@ import { Button } from "@/components/ui/button";
 import { getCategory } from "@/lib/categories";
 import { money } from "@/lib/format";
 import { isTransferTx, livingTxs, payeeBreakdown, transferFlows } from "@/lib/intelligence";
-import { cashBuckets, inPeriod, periodRange, spentInCategory } from "@/lib/period";
+import { activeRange, cashBuckets, spentInCategory } from "@/lib/period";
 import { useFinanceStore } from "@/lib/store";
-import { endOfMonth, startOfMonth, todayISO } from "@/lib/utils";
+import { cn, endOfMonth, inRange, startOfMonth, todayISO } from "@/lib/utils";
 
 export const Route = createFileRoute("/insights")({ component: InsightsPage });
 
@@ -26,13 +27,17 @@ function Insights() {
   const accounts = useFinanceStore((s) => s.accounts);
   const period = useFinanceStore((s) => s.period);
   const setPeriod = useFinanceStore((s) => s.setPeriod);
+  const cycleMode = useFinanceStore((s) => s.cycleMode);
+  const cycleOffset = useFinanceStore((s) => s.cycleOffset);
   const setImportOpen = useFinanceStore((s) => s.setImportOpen);
   const setChatOpen = useFinanceStore((s) => s.setChatOpen);
   const currency = useFinanceStore((s) => s.settings.currency);
-  const slice = txs.filter((t) => inPeriod(t, period));
+  const range = activeRange(txs, period, cycleMode, cycleOffset);
+  const slice = txs.filter((t) => inRange(t.date, range.from, range.to));
   const lived = livingTxs(slice);
-  const { label, from, to } = periodRange(period);
+  const { label, from, to } = range;
   const buckets = cashBuckets(slice);
+  const [flow, setFlow] = useState<"expense" | "income">("expense");
   const moved = slice.filter((t) => t.type === "expense" && isTransferTx(t)).reduce((s, t) => s + t.amount, 0);
   const days = Math.max(1, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86400000) + 1);
   const today = todayISO();
@@ -77,7 +82,11 @@ function Insights() {
           <p className="text-[13px] text-muted-foreground">Where money actually went</p>
           <h1 className="mt-1 font-display text-3xl tracking-tight">Insights</h1>
         </div>
-        <PeriodSelect value={period} onChange={setPeriod} />
+        {cycleMode ? (
+          <p className="text-[13px] text-muted-foreground">{label}</p>
+        ) : (
+          <PeriodSelect value={period} onChange={setPeriod} />
+        )}
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -154,8 +163,25 @@ function Insights() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-xl bg-card p-5 shadow-card">
-          <h2 className="mb-2 text-sm font-medium">Where it went · {label}</h2>
-          <CategoryDonut txs={lived} currency={currency} />
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-sm font-medium">{flow === "income" ? "Income breakdown" : "Where it went"} · {label}</h2>
+            <div className="flex rounded-lg bg-muted p-0.5">
+              {(["expense", "income"] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setFlow(k)}
+                  className={cn(
+                    "h-8 rounded-md px-2.5 text-[12px] font-medium capitalize",
+                    flow === k ? "bg-card text-foreground shadow-card" : "text-muted-foreground",
+                  )}
+                >
+                  {k === "expense" ? "Spending" : "Income"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <CategoryDonut txs={lived} currency={currency} kind={flow} showAmounts />
         </section>
         <section className="rounded-xl bg-card p-5 shadow-card">
           <h2 className="mb-2 text-sm font-medium">Payees · {label}</h2>

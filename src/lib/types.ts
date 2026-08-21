@@ -61,8 +61,14 @@ export type RecurringBill = {
   categoryId: string;
   dayOfMonth: number;
   dueDate?: string;
-  repeat?: "monthly" | "once";
+  repeat?: "weekly" | "fortnightly" | "monthly" | "once";
   enabled: boolean;
+};
+
+export type CustomCategory = {
+  id: string;
+  name: string;
+  type: TxType;
 };
 
 export type NoticeKind = "budget" | "bill" | "insight";

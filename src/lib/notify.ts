@@ -1,8 +1,9 @@
 import { getCategory } from "./categories";
+import { explainNegativeCash } from "./cycle";
 import { money } from "./format";
 import { spentInCategory } from "./period";
 import type { Budget, Notice, RecurringBill, Transaction } from "./types";
-import { addMonths, endOfMonth, isoDate, startOfMonth, todayISO, uid } from "./utils";
+import { addDays, addMonths, endOfMonth, isoDate, startOfMonth, todayISO, uid } from "./utils";
 
 function monthSpent(txs: Transaction[], categoryId: string) {
   const today = todayISO();
@@ -10,6 +11,18 @@ function monthSpent(txs: Transaction[], categoryId: string) {
 }
 
 export function nextBillDate(bill: Pick<RecurringBill, "dayOfMonth" | "dueDate" | "repeat">, from = todayISO()) {
+  const step = bill.repeat === "weekly" ? 7 : bill.repeat === "fortnightly" ? 14 : 0;
+  if (step) {
+    const seed = bill.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(bill.dueDate) ? bill.dueDate : from;
+    let cursor = seed;
+    let guard = 0;
+    while (cursor < from && guard < 80) {
+      cursor = addDays(cursor, step);
+      guard += 1;
+    }
+    const [y, m, d] = cursor.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
   if (bill.repeat === "once" && bill.dueDate) {
     const [y, m, d] = bill.dueDate.split("-").map(Number);
     return new Date(y, m - 1, d);
@@ -142,6 +155,20 @@ export function buildNotices(
       read: false,
       createdAt: new Date().toISOString(),
       fingerprint: `insight-dining-${from}`,
+    });
+  }
+
+  const cashHit = explainNegativeCash(transactions, currency);
+  if (cashHit.negative && cashHit.message) {
+    generated.push({
+      id: uid(),
+      kind: "insight",
+      title: "Cash in this account went negative",
+      body: cashHit.message,
+      href: "/",
+      read: false,
+      createdAt: new Date().toISOString(),
+      fingerprint: `cash-negative-${cashHit.date ?? today}`,
     });
   }
 

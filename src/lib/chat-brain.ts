@@ -1,4 +1,4 @@
-import { getCategory } from "./categories";
+import { getCategory, slugCategoryId } from "./categories";
 import { money } from "./format";
 import {
   applyRulesToTxs,
@@ -10,11 +10,12 @@ import {
   resolveCategoryAlias,
   transferFlows,
 } from "./intelligence";
+import { explainNegativeCash } from "./cycle";
 import { analyzeBooks, answerFromSnapshot, buildSnapshot, formatSnapshotBrief } from "./cove-expert";
 import { formatCards, retrieveKnowledge } from "./cove-knowledge";
 import { explainTax, parseMoneyish } from "./nz-finance";
 import { parseDate } from "./statement";
-import type { BankAccount, Budget, CoveFact, MemoryRule, RecurringBill, Settings, Transaction, TxType } from "./types";
+import type { BankAccount, Budget, CoveFact, CustomCategory, MemoryRule, RecurringBill, Settings, Transaction, TxType } from "./types";
 import { todayISO, uid } from "./utils";
 
 export type PendingIntent = {
@@ -39,6 +40,7 @@ export type BrainContext = {
   settings: Settings;
   currency: string;
   pending?: PendingIntent | null;
+  customCategories?: CustomCategory[];
 };
 
 export type BrainEffect = {
@@ -50,6 +52,7 @@ export type BrainEffect = {
   bills?: RecurringBill[];
   facts?: CoveFact[];
   settings?: Settings;
+  customCategories?: CustomCategory[];
   pending?: PendingIntent | null;
   handled?: boolean;
   needsAi?: boolean;
@@ -279,7 +282,7 @@ function completePending(input: string, q: string, ctx: BrainContext): BrainEffe
 
 function handleAdd(input: string, q: string, ctx: BrainContext): BrainEffect | null {
   if (!/^(add|log|record|enter|create)\b/.test(q)) return null;
-  if (/\bgst\b/.test(q) || /\bbudget\b/.test(q) || /\brule\b/.test(q)) return null;
+  if (/\bgst\b/.test(q) || /\bbudget\b/.test(q) || /\brule\b/.test(q) || /\bcategor(?:y|ies)\b/.test(q)) return null;
   const amount = extractAmountToken(q);
   const date = parseLooseDate(
     (input.match(/\b(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}|\d{4}[/.\-]\d{1,2}[/.\-]\d{1,2}|\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{2,4})\b/i) ?? [])[0] ??
@@ -402,7 +405,7 @@ export function interpretChat(input: string, ctx: BrainContext): BrainEffect {
   if (!q || /^(help|what can you do|\?)$/i.test(q)) {
     return {
       reply:
-        "I can add, edit or delete entries, read your statement, and analyse patterns in the books. Try “add uber income $400”, “delete the uber on 08/08/2026”, “how am I doing?”, or “what patterns do you see?”.",
+        "I can add, edit or delete entries, add categories, read your statement, and analyse patterns in the books. Try “add uber income $400”, “add a category called pets”, “why did cash go negative?”, or “how am I doing?”.",
       handled: true,
     };
   }
@@ -425,6 +428,43 @@ export function interpretChat(input: string, ctx: BrainContext): BrainEffect {
   if (edited) return edited;
   const deleted = handleDelete(text, q, ctx);
   if (deleted) return deleted;
+
+  const newCat = q.match(
+    /^(?:add|create|make|new)\s+(?:an?\s+)?(?:(income|expense)\s+)?categor(?:y|ies)\s+(?:called|named|for|:)?\s*(.+)$/i,
+  ) || q.match(/^new categor(?:y|ies)\s+(.+)$/i);
+  if (newCat) {
+    const typed = (newCat[1] || "").toLowerCase();
+    const type: TxType = typed === "income" ? "income" : "expense";
+    const name = (newCat[2] || newCat[1] || "")
+      .replace(/^(called|named|for|:)\s+/i, "")
+      .replace(/[.?!]$/, "")
+      .trim();
+    if (name.length < 2) return { reply: "What should I call the new category?", handled: true };
+    const already = resolveCategoryAlias(name);
+    if (already) {
+      return {
+        reply: `“${getCategory(already).name}” is already a category. Tell me a payee that belongs there, like “Vet is ${getCategory(already).name}”.`,
+        handled: true,
+      };
+    }
+    const id = slugCategoryId(name);
+    const pretty = name.replace(/\b\w/g, (c) => c.toUpperCase());
+    const customCategories = [
+      ...(ctx.customCategories ?? []).filter((c) => c.id !== id),
+      { id, name: pretty, type },
+    ];
+    return {
+      reply: `Added ${type} category “${pretty}”. Say a payee is ${pretty} to file matching entries there. I will not guess.`,
+      customCategories,
+      handled: true,
+    };
+  }
+
+  if (/negative|overdrawn|in the red|went minus|cash (went )?(down|negative)/i.test(q) && /why|what happen|how did|explain|figure/.test(q)) {
+    const hit = explainNegativeCash(ctx.transactions, currency);
+    if (!hit.negative) return { reply: "Cash in this account is not negative on the books I can see. I have not changed anything.", handled: true };
+    return { reply: hit.message ?? "Cash is negative. I have not changed any entries.", handled: true };
+  }
 
   const grounded = answerFromSnapshot(text, snap, ctx.transactions);
   if (grounded) return { reply: grounded, handled: true };

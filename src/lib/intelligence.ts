@@ -1,4 +1,4 @@
-import { getCategory, isTransferCategory } from "./categories";
+import { allCategories, getCategory, isTransferCategory } from "./categories";
 import type { BankAccount, MemoryRule, Transaction, TransferLeg, TxType } from "./types";
 import { uid } from "./utils";
 
@@ -28,6 +28,7 @@ export const BUILTIN_RULES: { re: RegExp; id: string }[] = [
   { re: /\b(uniqlo|zara|h&m|kmart|warehous(?:e)?|amazon|cotton on|country road|two dollar|wsl eastgate|farmers|briscoes|perfume|rebel sport)\b/i, id: "shopping" },
   { re: /\b(in a spin|laundr|bunnings|mitre ?10)\b/i, id: "household" },
   { re: /\b(gem visa|gemvisa)\b/i, id: "credit-card" },
+  { re: /\b(afterpay|humm|latpay|personal loan|car loan|student loan|\bdebt\b)\b/i, id: "debt" },
   { re: /\b(unarranged overdraft|overdraft fee)\b/i, id: "other" },
   { re: /\b(cinema|event cinemas|ticketmaster|concert|academy cinema|aotea)\b/i, id: "entertainment" },
   { re: /\b(university|course|udemy|workbook|tuition)\b/i, id: "education" },
@@ -305,6 +306,9 @@ export const CATEGORY_ALIASES: Record<string, string> = {
   "credit card": "credit-card",
   creditcard: "credit-card",
   visa: "credit-card",
+  debt: "debt",
+  loan: "debt",
+  afterpay: "debt",
   logmate: "transport",
   sub: "subscriptions",
   subscriptions: "subscriptions",
@@ -317,5 +321,8 @@ export const CATEGORY_ALIASES: Record<string, string> = {
 
 export function resolveCategoryAlias(raw: string) {
   const key = raw.trim().toLowerCase().replace(/s$/, "");
-  return CATEGORY_ALIASES[raw.trim().toLowerCase()] ?? CATEGORY_ALIASES[key] ?? null;
+  const direct = CATEGORY_ALIASES[raw.trim().toLowerCase()] ?? CATEGORY_ALIASES[key];
+  if (direct) return direct;
+  const hit = allCategories().find((c) => c.name.toLowerCase() === raw.trim().toLowerCase() || c.id === key || c.id === `c-${key}`);
+  return hit?.id ?? null;
 }

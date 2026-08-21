@@ -32,9 +32,10 @@ test("cash buckets keep income, living, investing and savings apart", () => {
   assert.equal(b.investing, 150);
   assert.equal(b.savings, 100);
   assert.equal(b.credit, 50);
+  assert.equal(b.debt, 0);
   assert.equal(b.leftover, 800);
   assert.equal(b.cash, 500);
-  assert.equal(b.income - b.expense - b.investing - b.savings - b.credit, b.cash);
+  assert.equal(b.income - b.expense - b.investing - b.savings - b.credit - b.debt, b.cash);
 });
 
 test("week and fortnight ranges are bounded", () => {

@@ -121,3 +121,8 @@ test("ANZ sample CSV tags Sharesies and savings transfers", () => {
   assert.ok(gem.length >= 1);
   assert.ok(gem.every((r) => r.categoryId === "credit-card"));
 });
+
+test("debt payments are debt, not living", () => {
+  assert.equal(classifyNote("AP Afterpay", "expense").categoryId, "debt");
+  assert.equal(classifyNote("DD personal loan", "expense").categoryId, "debt");
+});

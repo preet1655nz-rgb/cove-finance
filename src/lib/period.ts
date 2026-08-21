@@ -1,4 +1,5 @@
 import { isAllocationCategory, isTransferCategory } from "./categories";
+import { payCycleRange } from "./cycle";
 import { isTransferTx } from "./intelligence";
 import { addDays, addMonths, endOfMonth, endOfWeek, inRange, startOfMonth, startOfWeek, todayISO } from "./utils";
 import type { Period, Transaction } from "./types";
@@ -27,6 +28,11 @@ export function periodRange(period: Period): { from: string; to: string; label: 
   return { from: "1970-01-01", to: today, label: "All time" };
 }
 
+export function activeRange(txs: Transaction[], period: Period, cycleMode: boolean, cycleOffset = 0) {
+  if (cycleMode) return payCycleRange(txs, cycleOffset);
+  return periodRange(period);
+}
+
 export function inPeriod(tx: Transaction, period: Period) {
   const { from, to } = periodRange(period);
   return inRange(tx.date, from, to);
@@ -38,6 +44,7 @@ export function cashBuckets(txs: Transaction[]) {
   let investing = 0;
   let savings = 0;
   let credit = 0;
+  let debt = 0;
   for (const t of txs) {
     if (isTransferTx(t) || isTransferCategory(t.categoryId)) continue;
     if (t.type === "income") {
@@ -47,11 +54,12 @@ export function cashBuckets(txs: Transaction[]) {
     if (t.categoryId === "investing") investing += t.amount;
     else if (t.categoryId === "savings") savings += t.amount;
     else if (t.categoryId === "credit-card") credit += t.amount;
+    else if (t.categoryId === "debt") debt += t.amount;
     else expense += t.amount;
   }
   const leftover = income - expense;
-  const cash = leftover - investing - savings - credit;
-  return { income, expense, investing, savings, credit, leftover, cash };
+  const cash = leftover - investing - savings - credit - debt;
+  return { income, expense, investing, savings, credit, debt, leftover, cash };
 }
 
 export function sumBy(

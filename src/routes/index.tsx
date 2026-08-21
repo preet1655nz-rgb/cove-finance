@@ -8,9 +8,10 @@ import { Progress } from "@/components/ui/progress";
 import { getCategory } from "@/lib/categories";
 import { money, pct, signedMoney } from "@/lib/format";
 import { needsReconcile } from "@/lib/intelligence";
-import { cashBuckets, inPeriod, periodRange, spentInCategory } from "@/lib/period";
+import { cashBuckets, activeRange, spentInCategory } from "@/lib/period";
+import { explainNegativeCash } from "@/lib/cycle";
 import { useFinanceStore } from "@/lib/store";
-import { endOfMonth, startOfMonth, todayISO } from "@/lib/utils";
+import { endOfMonth, inRange, startOfMonth, todayISO } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -27,12 +28,16 @@ function Dashboard() {
   const budgets = useFinanceStore((s) => s.budgets);
   const period = useFinanceStore((s) => s.period);
   const setPeriod = useFinanceStore((s) => s.setPeriod);
+  const cycleMode = useFinanceStore((s) => s.cycleMode);
+  const cycleOffset = useFinanceStore((s) => s.cycleOffset);
+  const setCycleOffset = useFinanceStore((s) => s.setCycleOffset);
   const name = useFinanceStore((s) => s.settings.displayName);
   const currency = useFinanceStore((s) => s.settings.currency);
-  const slice = txs.filter((t) => inPeriod(t, period));
+  const range = activeRange(txs, period, cycleMode, cycleOffset);
+  const slice = txs.filter((t) => inRange(t.date, range.from, range.to));
   const b = cashBuckets(slice);
   const all = cashBuckets(txs);
-  const { label } = periodRange(period);
+  const { label } = range;
   const recent = [...txs].sort((a, x) => (a.date < x.date ? 1 : a.date > x.date ? -1 : 0)).slice(0, 6);
   const today = todayISO();
   const from = startOfMonth(today);
@@ -45,7 +50,7 @@ function Dashboard() {
     .sort((a, x) => x.ratio - a.ratio)
     .slice(0, 4);
   const openRec = txs.filter(needsReconcile).length;
-  const addsUp = Math.abs(b.income - (b.expense + b.investing + b.savings + b.credit) - b.cash) < 0.01;
+  const cashStory = explainNegativeCash(slice, currency);
 
   return (
     <div className="space-y-8">
@@ -56,7 +61,24 @@ function Dashboard() {
           </p>
           <h1 className="mt-1 font-display text-3xl tracking-tight sm:text-4xl">Overview</h1>
         </div>
-        <PeriodSelect value={period} onChange={setPeriod} />
+        {cycleMode ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="h-9 rounded-md bg-muted px-3 text-[13px] font-medium"
+              onClick={() => setCycleOffset(cycleOffset + 1)}
+            >
+              Previous cycle
+            </button>
+            {cycleOffset > 0 ? (
+              <button type="button" className="h-9 rounded-md bg-muted px-3 text-[13px] font-medium" onClick={() => setCycleOffset(cycleOffset - 1)}>
+                Next
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <PeriodSelect value={period} onChange={setPeriod} />
+        )}
       </header>
 
       <section className="rounded-xl bg-card p-6 shadow-card sm:p-8">
@@ -66,11 +88,11 @@ function Dashboard() {
         </p>
         <p className="mt-3 text-sm text-muted-foreground">
           {txs.length
-            ? `Income ${money(b.income, currency)} − living ${money(b.expense, currency)} − investing ${money(b.investing, currency)} − savings ${money(b.savings, currency)}${b.credit ? ` − cards ${money(b.credit, currency)}` : ""} = cash movement. Transfers between your accounts are ignored.`
+            ? `Income ${money(b.income, currency)} − living ${money(b.expense, currency)} − investing ${money(b.investing, currency)} − savings ${money(b.savings, currency)}${b.credit ? ` − cards ${money(b.credit, currency)}` : ""}${b.debt ? ` − debt ${money(b.debt, currency)}` : ""} = cash movement. Transfers between your accounts are ignored.`
             : "No entries yet. Add one, or upload a statement."}
         </p>
-        {!addsUp ? (
-          <p className="mt-2 text-sm text-expense">These four streams should always add up. Something is missing — open Reconcile.</p>
+        {cashStory.negative && cashStory.message ? (
+          <p className="mt-2 text-sm text-expense">{cashStory.message} Ask Cove if you want it walked through — nothing was edited.</p>
         ) : null}
         {openRec ? (
           <p className="mt-2 text-sm">
@@ -85,9 +107,12 @@ function Dashboard() {
           <Stat label="Investing" value={money(b.investing, currency, true)} />
           <Stat label="Savings" value={money(b.savings, currency, true)} />
         </div>
-        {b.credit > 0 ? (
+        {b.credit > 0 || b.debt > 0 ? (
           <p className="mt-4 text-[12px] text-muted-foreground">
-            Credit card payments {money(b.credit, currency)} sit outside living spend.
+            {b.credit > 0 ? `Credit card payments ${money(b.credit, currency)}` : ""}
+            {b.credit > 0 && b.debt > 0 ? " · " : ""}
+            {b.debt > 0 ? `Debt ${money(b.debt, currency)}` : ""}
+            {" "}sit outside living spend.
           </p>
         ) : null}
         <p className="mt-3 text-[12px] text-muted-foreground">
@@ -108,7 +133,7 @@ function Dashboard() {
             <h2 className="text-sm font-medium">Living spend</h2>
             <span className="text-[12px] text-muted-foreground">{label}</span>
           </div>
-          <CategoryDonut txs={slice} currency={currency} />
+          <CategoryDonut txs={slice} currency={currency} showAmounts />
         </section>
       </div>
 

@@ -6,6 +6,7 @@ import {
   Bike,
   Briefcase,
   Bus,
+  CircleDollarSign,
   Clapperboard,
   CreditCard,
   Gift,
@@ -20,13 +21,14 @@ import {
   Shield,
   ShoppingBag,
   Sparkles,
+  Tag,
   TrendingUp,
   Utensils,
   Wallet,
   Wifi,
   Wine,
 } from "lucide-react";
-import type { TxType } from "./types";
+import type { CustomCategory, TxType } from "./types";
 
 export type Category = {
   id: string;
@@ -60,20 +62,40 @@ export const CATEGORIES: Category[] = [
   { id: "drinks", name: "Cafes", type: "expense", icon: Wine, tint: "var(--color-chart-5)" },
   { id: "tax", name: "Tax", type: "expense", icon: Scale, tint: "var(--color-chart-2)" },
   { id: "credit-card", name: "Credit card", type: "expense", icon: CreditCard, tint: "var(--color-chart-3)" },
+  { id: "debt", name: "Debt", type: "expense", icon: CircleDollarSign, tint: "var(--color-expense)" },
   { id: "investing", name: "Investing", type: "expense", icon: TrendingUp, tint: "var(--color-income)" },
   { id: "savings", name: "Savings", type: "expense", icon: Landmark, tint: "var(--color-income)" },
   { id: "transfer-out", name: "Transfer out", type: "expense", icon: ArrowLeftRight, tint: "var(--color-chart-3)" },
   { id: "other", name: "Other", type: "expense", icon: Sparkles, tint: "var(--color-chart-4)" },
 ];
 
-const map = new Map(CATEGORIES.map((c) => [c.id, c]));
+let extras: CustomCategory[] = [];
+
+export function setCustomCategories(list: CustomCategory[]) {
+  extras = list;
+}
+
+export function customCategories() {
+  return extras;
+}
+
+export function allCategories(): Category[] {
+  const extraCats: Category[] = extras.map((c) => ({
+    id: c.id,
+    name: c.name,
+    type: c.type,
+    icon: Tag,
+    tint: c.type === "income" ? "var(--color-income)" : "var(--color-chart-3)",
+  }));
+  return [...CATEGORIES, ...extraCats];
+}
 
 export function getCategory(id: string) {
-  return map.get(id) ?? map.get("other")!;
+  return allCategories().find((c) => c.id === id) ?? CATEGORIES.find((c) => c.id === "other")!;
 }
 
 export function categoriesFor(type: TxType) {
-  return CATEGORIES.filter((c) => c.type === type);
+  return allCategories().filter((c) => c.type === type);
 }
 
 export function isTransferCategory(id: string) {
@@ -81,5 +103,14 @@ export function isTransferCategory(id: string) {
 }
 
 export function isAllocationCategory(id: string) {
-  return id === "investing" || id === "savings" || id === "credit-card";
+  return id === "investing" || id === "savings" || id === "credit-card" || id === "debt";
+}
+
+export function slugCategoryId(name: string) {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 28);
+  return slug ? `c-${slug}` : `c-${Math.random().toString(36).slice(2, 8)}`;
 }
