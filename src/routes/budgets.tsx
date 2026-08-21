@@ -95,13 +95,26 @@ function Budgets() {
                       </p>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className="text-[12px] text-muted-foreground hover:text-destructive"
-                    onClick={() => removeBudget(b.id)}
-                  >
-                    Remove
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="text-[12px] text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        setCat(b.categoryId);
+                        setAmt(String(b.amount));
+                        setOpen(true);
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[12px] text-muted-foreground hover:text-destructive"
+                      onClick={() => removeBudget(b.id)}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
                 <Progress
                   className="mt-4"

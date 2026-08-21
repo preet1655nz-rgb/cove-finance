@@ -101,7 +101,7 @@ export const useFinanceStore = create<FinanceState>()(
       setAddOpen: (open, preset) =>
         set({
           addOpen: open,
-          editingId: open ? get().editingId : null,
+          editingId: null,
           draft: open
             ? { ...emptyDraft(), ...preset, date: preset?.date ?? todayISO() }
             : emptyDraft(),

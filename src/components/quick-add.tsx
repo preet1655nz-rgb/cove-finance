@@ -39,7 +39,9 @@ export function QuickAdd() {
       <DialogContent className="flex max-h-[92dvh] flex-col gap-4 overflow-hidden sm:max-w-[400px]">
         <DialogHeader>
           <DialogTitle>{editingId ? "Edit entry" : "New entry"}</DialogTitle>
-          <DialogDescription>Amount first. Category next.</DialogDescription>
+          <DialogDescription>
+            {editingId ? "Change the amount, category, date or note." : "Amount first. Category next."}
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col gap-4">
           <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
@@ -69,6 +71,7 @@ export function QuickAdd() {
               autoFocus
               inputMode="decimal"
               value={draft.amount}
+              onFocus={(e) => e.currentTarget.select()}
               onChange={(e) => updateDraft({ amount: e.target.value.replace(/[^0-9.]/g, "") })}
               placeholder="0"
               className="w-full bg-transparent text-center font-display text-5xl tracking-tight outline-none placeholder:text-muted-foreground/40"

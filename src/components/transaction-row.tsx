@@ -15,7 +15,8 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
     <button
       type="button"
       onClick={() => startEdit(tx)}
-      className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors duration-150 hover:bg-muted/60"
+      aria-label={`Edit ${tx.note || cat.name}, ${money(tx.amount, currency)}`}
+      className="flex w-full min-h-11 items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors duration-150 hover:bg-muted/60"
     >
       <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-foreground">
         <Icon className="size-4" strokeWidth={1.75} />

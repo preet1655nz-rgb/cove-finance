@@ -10,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { money } from "@/lib/format";
 import {
   SAMPLE_STATEMENT,
   NZ_BANK_SAMPLES,
@@ -28,7 +27,6 @@ export function StatementImport() {
   const open = useFinanceStore((s) => s.importOpen);
   const setOpen = useFinanceStore((s) => s.setImportOpen);
   const importTransactions = useFinanceStore((s) => s.importTransactions);
-  const currency = useFinanceStore((s) => s.settings.currency);
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -269,15 +267,28 @@ export function StatementImport() {
                           </option>
                         ))}
                       </select>
-                      <span
+                      <input
+                        inputMode="decimal"
+                        aria-label={`Amount for ${row.note || row.date}`}
+                        defaultValue={row.amount.toFixed(2)}
+                        key={`${row.key}-${row.amount}-${row.type}`}
+                        onFocus={(e) => e.currentTarget.select()}
+                        onBlur={(e) => {
+                          const n = Number(e.currentTarget.value.replace(/[^0-9.]/g, ""));
+                          if (Number.isFinite(n) && n > 0) {
+                            patch(row.key, { amount: Math.round(n * 100) / 100 });
+                          } else {
+                            e.currentTarget.value = row.amount.toFixed(2);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                        }}
                         className={cn(
-                          "shrink-0 text-right text-sm font-medium tabular-nums",
+                          "h-9 w-[6.5rem] shrink-0 rounded-md bg-card px-2 text-right text-sm font-medium tabular-nums shadow-card outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
                           row.type === "income" ? "text-income" : "text-foreground",
                         )}
-                      >
-                        {row.type === "income" ? "+" : "−"}
-                        {money(row.amount, currency)}
-                      </span>
+                      />
                     </div>
                   </li>
                 ))}

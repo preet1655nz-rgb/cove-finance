@@ -145,6 +145,7 @@ export function StatementLedger({
                   )}
                   onClick={() => {
                     if (row.kind === "tx" && row.date) onSelectDate(row.date);
+                    if (row.tx) startEdit(row.tx);
                   }}
                 >
                   <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-muted-foreground sm:px-6">
@@ -152,14 +153,7 @@ export function StatementLedger({
                   </td>
                   <td className="max-w-[340px] px-2 py-2.5">
                     {row.kind === "tx" ? (
-                      <button
-                        type="button"
-                        className="block max-w-full text-left"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (row.tx) startEdit(row.tx);
-                        }}
-                      >
+                      <span className="block max-w-full text-left">
                         <span className="font-medium">
                           {details.code ? `${details.code}  ` : ""}
                           {details.primary}
@@ -167,7 +161,7 @@ export function StatementLedger({
                         {details.secondary ? (
                           <span className="mt-0.5 block text-[12px] text-muted-foreground">{details.secondary}</span>
                         ) : null}
-                      </button>
+                      </span>
                     ) : (
                       <span>{row.note}</span>
                     )}

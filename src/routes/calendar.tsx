@@ -15,6 +15,7 @@ import { ChevronLeft, ChevronRight, Upload } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { PageFrame } from "@/components/page-frame";
 import { StatementLedger, buildMonthLedger } from "@/components/statement-ledger";
+import { TransactionRow } from "@/components/transaction-row";
 import { Button } from "@/components/ui/button";
 import { formatMonth, money, signedMoney } from "@/lib/format";
 import { useFinanceStore } from "@/lib/store";
@@ -233,24 +234,33 @@ function CalendarView() {
 
       <StatementLedger rows={ledger} selectedDate={selectedIso} onSelectDate={setSelected} />
 
-      <section className="flex items-center justify-between gap-3 rounded-xl bg-card px-5 py-4 shadow-card">
-        <div>
-          <p className="text-sm font-medium">{format(parseISO(selectedIso), "EEEE d MMMM")}</p>
-          {dayBills.length ? (
-            <p className="mt-1 text-[12px] text-muted-foreground">
-              Bill{dayBills.length === 1 ? "" : "s"} due: {dayBills.map((b) => b.name).join(", ")}
-            </p>
-          ) : (
-            <p className="mt-1 text-[12px] text-muted-foreground">
-              {selectedTxs.length
-                ? `${selectedTxs.length} on this day — tap a row above to edit`
-                : "Nothing on this day yet"}
-            </p>
-          )}
+      <section className="rounded-xl bg-card px-5 py-4 shadow-card">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium">{format(parseISO(selectedIso), "EEEE d MMMM")}</p>
+            {dayBills.length ? (
+              <p className="mt-1 text-[12px] text-muted-foreground">
+                Bill{dayBills.length === 1 ? "" : "s"} due: {dayBills.map((b) => b.name).join(", ")}
+              </p>
+            ) : (
+              <p className="mt-1 text-[12px] text-muted-foreground">
+                {selectedTxs.length
+                  ? "Tap an entry to change the amount"
+                  : "Nothing on this day yet"}
+              </p>
+            )}
+          </div>
+          <Button variant="outline" onClick={() => setAddOpen(true, { date: selectedIso })}>
+            Add for this day
+          </Button>
         </div>
-        <Button variant="outline" onClick={() => setAddOpen(true, { date: selectedIso })}>
-          Add for this day
-        </Button>
+        {selectedTxs.length ? (
+          <div className="mt-3 border-t border-border pt-2">
+            {selectedTxs.map((tx) => (
+              <TransactionRow key={tx.id} tx={tx} />
+            ))}
+          </div>
+        ) : null}
       </section>
     </div>
   );
