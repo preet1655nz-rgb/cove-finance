@@ -4,6 +4,7 @@ import { getCategory } from "./categories";
 import { buildNotices } from "./notify";
 import { spentInCategory } from "./period";
 import { buildSeed } from "./seed";
+import { txFingerprint } from "./statement";
 import type { Budget, Notice, RecurringBill, Settings, Transaction, TxType } from "./types";
 import { endOfMonth, startOfMonth, todayISO, uid } from "./utils";
 
@@ -15,6 +16,14 @@ type Draft = {
   date: string;
 };
 
+export type ImportRow = {
+  date: string;
+  amount: number;
+  type: TxType;
+  note: string;
+  categoryId: string;
+};
+
 type FinanceState = {
   transactions: Transaction[];
   budgets: Budget[];
@@ -24,13 +33,17 @@ type FinanceState = {
   period: "this-month" | "last-month" | "quarter" | "year" | "all";
   addOpen: boolean;
   settingsOpen: boolean;
+  importOpen: boolean;
   editingId: string | null;
   draft: Draft;
   hydrated: boolean;
+  focusMonth: string | null;
   setHydrated: (v: boolean) => void;
   setPeriod: (p: FinanceState["period"]) => void;
   setAddOpen: (open: boolean, preset?: Partial<Draft>) => void;
   setSettingsOpen: (open: boolean) => void;
+  setImportOpen: (open: boolean) => void;
+  setFocusMonth: (month: string | null) => void;
   updateDraft: (patch: Partial<Draft>) => void;
   addTransaction: () => boolean;
   updateTransaction: (id: string, patch: Partial<Transaction>) => void;
@@ -47,6 +60,7 @@ type FinanceState = {
   resetSample: () => void;
   clearAll: () => void;
   importData: (raw: unknown) => boolean;
+  importTransactions: (rows: ImportRow[]) => { added: number; skipped: number };
 };
 
 const emptyDraft = (): Draft => ({
@@ -77,9 +91,11 @@ export const useFinanceStore = create<FinanceState>()(
       period: "this-month",
       addOpen: false,
       settingsOpen: false,
+      importOpen: false,
       editingId: null,
       draft: emptyDraft(),
       hydrated: false,
+      focusMonth: null,
       setHydrated: (v) => set({ hydrated: v }),
       setPeriod: (period) => set({ period }),
       setAddOpen: (open, preset) =>
@@ -91,6 +107,8 @@ export const useFinanceStore = create<FinanceState>()(
             : emptyDraft(),
         }),
       setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
+      setImportOpen: (importOpen) => set({ importOpen }),
+      setFocusMonth: (focusMonth) => set({ focusMonth }),
       updateDraft: (patch) => set({ draft: { ...get().draft, ...patch } }),
       addTransaction: () => {
         const { draft, editingId, transactions } = get();
@@ -244,6 +262,49 @@ export const useFinanceStore = create<FinanceState>()(
           }),
         );
         return true;
+      },
+      importTransactions: (incoming) => {
+        const existing = get().transactions;
+        const seen = new Set(existing.map((t) => txFingerprint(t.date, t.amount, t.note)));
+        const added: Transaction[] = [];
+        let skipped = 0;
+        for (const row of incoming) {
+          if (!Number.isFinite(row.amount) || row.amount <= 0 || !row.date) {
+            skipped += 1;
+            continue;
+          }
+          const note = row.note.trim();
+          const fp = txFingerprint(row.date, row.amount, note);
+          if (seen.has(fp)) {
+            skipped += 1;
+            continue;
+          }
+          seen.add(fp);
+          const type = getCategory(row.categoryId).type;
+          added.push({
+            id: uid(),
+            type,
+            amount: Math.round(row.amount * 100) / 100,
+            categoryId: row.categoryId,
+            note,
+            date: row.date,
+            createdAt: new Date().toISOString(),
+          });
+        }
+        if (added.length) {
+          const latest = added.reduce((m, t) => (t.date > m ? t.date : m), added[0].date);
+          set(
+            withNotices({
+              ...get(),
+              transactions: [...added, ...existing],
+              importOpen: false,
+              focusMonth: latest.slice(0, 7),
+            }),
+          );
+        } else {
+          set({ importOpen: false });
+        }
+        return { added: added.length, skipped };
       },
     }),
     {

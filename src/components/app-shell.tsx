@@ -1,19 +1,21 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { FileText, LayoutGrid, PieChart, Plus, Receipt, Settings, Wallet } from "lucide-react";
+import { CalendarDays, FileText, LayoutGrid, PieChart, Plus, Receipt, Settings, Wallet } from "lucide-react";
 import { useEffect } from "react";
 import { NotificationCenter } from "@/components/notification-center";
 import { QuickAdd } from "@/components/quick-add";
 import { SettingsDialog } from "@/components/settings-dialog";
+import { StatementImport } from "@/components/statement-import";
 import { Button } from "@/components/ui/button";
 import { useFinanceStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { to: "/", label: "Overview", icon: LayoutGrid },
-  { to: "/activity", label: "Activity", icon: Receipt },
-  { to: "/budgets", label: "Budgets", icon: Wallet },
-  { to: "/insights", label: "Insights", icon: PieChart },
-  { to: "/reports", label: "Reports", icon: FileText },
+  { to: "/", label: "Overview", short: "Home", icon: LayoutGrid },
+  { to: "/calendar", label: "Calendar", short: "Cal", icon: CalendarDays },
+  { to: "/activity", label: "Activity", short: "Log", icon: Receipt },
+  { to: "/budgets", label: "Budgets", short: "Caps", icon: Wallet },
+  { to: "/insights", label: "Insights", short: "Stats", icon: PieChart },
+  { to: "/reports", label: "Reports", short: "PDF", icon: FileText },
 ] as const;
 
 function isActive(pathname: string, to: string) {
@@ -124,7 +126,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 backdrop-blur-md lg:hidden">
-        <div className="mx-auto grid max-w-lg grid-cols-5 px-1 pb-[env(safe-area-inset-bottom)]">
+        <div className="mx-auto grid max-w-lg grid-cols-6 px-0.5 pb-[env(safe-area-inset-bottom)]">
           {NAV.map((item) => {
             const Icon = item.icon;
             const active = isActive(pathname, item.to);
@@ -132,13 +134,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.to}
                 to={item.to}
+                aria-label={item.label}
                 className={cn(
-                  "flex min-h-14 flex-col items-center justify-center gap-1 text-[10px] font-medium",
+                  "flex min-h-14 flex-col items-center justify-center gap-1 px-0.5 text-[10px] font-medium",
                   active ? "text-foreground" : "text-muted-foreground",
                 )}
               >
                 <Icon className="size-5" strokeWidth={active ? 2 : 1.6} />
-                {item.label}
+                <span className="whitespace-nowrap">{item.short}</span>
               </Link>
             );
           })}
@@ -147,6 +150,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <QuickAdd />
       <SettingsDialog />
+      <StatementImport />
     </div>
   );
 }

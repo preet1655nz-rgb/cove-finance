@@ -1,5 +1,5 @@
 import type { Budget, RecurringBill, Settings, Transaction } from "./types";
-import { isoDate, uid } from "./utils";
+import { isoDate } from "./utils";
 
 function d(year: number, monthIndex: number, day: number) {
   return isoDate(new Date(year, monthIndex, day));
@@ -11,6 +11,12 @@ function shift(days: number) {
   return isoDate(dt);
 }
 
+let seq = 0;
+function sid(prefix: string) {
+  seq += 1;
+  return `${prefix}-${seq}`;
+}
+
 function tx(
   type: Transaction["type"],
   amount: number,
@@ -19,7 +25,7 @@ function tx(
   note: string,
 ): Transaction {
   return {
-    id: uid(),
+    id: sid("tx"),
     type,
     amount,
     categoryId,
@@ -42,6 +48,7 @@ export function buildSeed(): {
   bills: RecurringBill[];
   settings: Settings;
 } {
+  seq = 0;
   const now = new Date();
   const y = now.getFullYear();
   const m = now.getMonth();
@@ -111,22 +118,22 @@ export function buildSeed(): {
   ];
 
   const budgets: Budget[] = [
-    { id: uid(), categoryId: "housing", amount: 2200 },
-    { id: uid(), categoryId: "groceries", amount: 700 },
-    { id: uid(), categoryId: "dining", amount: 280 },
-    { id: uid(), categoryId: "transport", amount: 250 },
-    { id: uid(), categoryId: "utilities", amount: 360 },
-    { id: uid(), categoryId: "subscriptions", amount: 80 },
-    { id: uid(), categoryId: "entertainment", amount: 150 },
-    { id: uid(), categoryId: "shopping", amount: 200 },
-    { id: uid(), categoryId: "health", amount: 120 },
+    { id: sid("bd"), categoryId: "housing", amount: 2200 },
+    { id: sid("bd"), categoryId: "groceries", amount: 700 },
+    { id: sid("bd"), categoryId: "dining", amount: 280 },
+    { id: sid("bd"), categoryId: "transport", amount: 250 },
+    { id: sid("bd"), categoryId: "utilities", amount: 360 },
+    { id: sid("bd"), categoryId: "subscriptions", amount: 80 },
+    { id: sid("bd"), categoryId: "entertainment", amount: 150 },
+    { id: sid("bd"), categoryId: "shopping", amount: 200 },
+    { id: sid("bd"), categoryId: "health", amount: 120 },
   ];
 
   const bills: RecurringBill[] = [
-    { id: uid(), name: "Rent", amount: 2200, categoryId: "housing", dayOfMonth: 1, enabled: true },
-    { id: uid(), name: "Fibre", amount: 142, categoryId: "utilities", dayOfMonth: 12, enabled: true },
-    { id: uid(), name: "Power", amount: 180, categoryId: "utilities", dayOfMonth: 18, enabled: true },
-    { id: uid(), name: "Netflix", amount: 24.99, categoryId: "subscriptions", dayOfMonth: 8, enabled: true },
+    { id: sid("bl"), name: "Rent", amount: 2200, categoryId: "housing", dayOfMonth: 1, enabled: true },
+    { id: sid("bl"), name: "Fibre", amount: 142, categoryId: "utilities", dayOfMonth: 12, enabled: true },
+    { id: sid("bl"), name: "Power", amount: 180, categoryId: "utilities", dayOfMonth: 18, enabled: true },
+    { id: sid("bl"), name: "Netflix", amount: 24.99, categoryId: "subscriptions", dayOfMonth: 8, enabled: true },
   ];
 
   return { transactions, budgets, bills, settings: defaultSettings };

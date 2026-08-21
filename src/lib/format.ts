@@ -24,6 +24,13 @@ export function signedMoney(amount: number, currency: string) {
   return abs;
 }
 
+export function plainMoney(amount: number) {
+  return new Intl.NumberFormat("en-NZ", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
 export function formatDay(iso: string) {
   return format(parseISO(iso), "d MMM");
 }

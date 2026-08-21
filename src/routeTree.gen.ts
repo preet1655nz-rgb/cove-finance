@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ActivityRouteImport } from './routes/activity'
 import { Route as BudgetsRouteImport } from './routes/budgets'
+import { Route as CalendarRouteImport } from './routes/calendar'
 import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as ReportsRouteImport } from './routes/reports'
 
@@ -30,6 +31,11 @@ const BudgetsRoute = BudgetsRouteImport.update({
   path: '/budgets',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CalendarRoute = CalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InsightsRoute = InsightsRouteImport.update({
   id: '/insights',
   path: '/insights',
@@ -45,6 +51,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
   '/budgets': typeof BudgetsRoute
+  '/calendar': typeof CalendarRoute
   '/insights': typeof InsightsRoute
   '/reports': typeof ReportsRoute
 }
@@ -52,6 +59,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
   '/budgets': typeof BudgetsRoute
+  '/calendar': typeof CalendarRoute
   '/insights': typeof InsightsRoute
   '/reports': typeof ReportsRoute
 }
@@ -60,21 +68,31 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
   '/budgets': typeof BudgetsRoute
+  '/calendar': typeof CalendarRoute
   '/insights': typeof InsightsRoute
   '/reports': typeof ReportsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/activity' | '/budgets' | '/insights' | '/reports'
+  fullPaths:
+    '/' | '/activity' | '/budgets' | '/calendar' | '/insights' | '/reports'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/activity' | '/budgets' | '/insights' | '/reports'
-  id: '__root__' | '/' | '/activity' | '/budgets' | '/insights' | '/reports'
+  to: '/' | '/activity' | '/budgets' | '/calendar' | '/insights' | '/reports'
+  id:
+    | '__root__'
+    | '/'
+    | '/activity'
+    | '/budgets'
+    | '/calendar'
+    | '/insights'
+    | '/reports'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ActivityRoute: typeof ActivityRoute
   BudgetsRoute: typeof BudgetsRoute
+  CalendarRoute: typeof CalendarRoute
   InsightsRoute: typeof InsightsRoute
   ReportsRoute: typeof ReportsRoute
 }
@@ -102,6 +120,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BudgetsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/calendar': {
+      id: '/calendar'
+      path: '/calendar'
+      fullPath: '/calendar'
+      preLoaderRoute: typeof CalendarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/insights': {
       id: '/insights'
       path: '/insights'
@@ -123,6 +148,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ActivityRoute: ActivityRoute,
   BudgetsRoute: BudgetsRoute,
+  CalendarRoute: CalendarRoute,
   InsightsRoute: InsightsRoute,
   ReportsRoute: ReportsRoute,
 }

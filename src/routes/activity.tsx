@@ -27,6 +27,7 @@ function Activity() {
   const period = useFinanceStore((s) => s.period);
   const setPeriod = useFinanceStore((s) => s.setPeriod);
   const setAddOpen = useFinanceStore((s) => s.setAddOpen);
+  const setImportOpen = useFinanceStore((s) => s.setImportOpen);
   const currency = useFinanceStore((s) => s.settings.currency);
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<"all" | TxType>("all");
@@ -64,7 +65,12 @@ function Activity() {
           <p className="text-[13px] text-muted-foreground">Every in and out</p>
           <h1 className="mt-1 font-display text-3xl tracking-tight">Activity</h1>
         </div>
-        <Button onClick={() => setAddOpen(true)}>Add</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            Statement
+          </Button>
+          <Button onClick={() => setAddOpen(true)}>Add</Button>
+        </div>
       </header>
 
       <PeriodSelect value={period} onChange={setPeriod} />

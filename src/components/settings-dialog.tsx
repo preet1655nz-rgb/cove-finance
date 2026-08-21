@@ -22,6 +22,7 @@ export function SettingsDialog() {
   const resetSample = useFinanceStore((s) => s.resetSample);
   const clearAll = useFinanceStore((s) => s.clearAll);
   const importData = useFinanceStore((s) => s.importData);
+  const setImportOpen = useFinanceStore((s) => s.setImportOpen);
   const transactions = useFinanceStore((s) => s.transactions);
   const budgets = useFinanceStore((s) => s.budgets);
   const bills = useFinanceStore((s) => s.bills);
@@ -123,6 +124,15 @@ export function SettingsDialog() {
               </span>
             </label>
           </div>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setOpen(false);
+              setImportOpen(true);
+            }}
+          >
+            Upload bank statement
+          </Button>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => { resetSample(); toast.success("Sample data restored"); }}>
               Restore sample
