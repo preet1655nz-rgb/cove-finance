@@ -106,3 +106,76 @@ test("mutations still apply and do not wipe the grocery row", () => {
   assert.equal(r.budgets?.[0]?.amount, 250);
   assert.equal(r.transactions, undefined);
 });
+
+test("add uber income asks for date then logs it", () => {
+  const ctx = { ...empty(), currency: "NZD" as const };
+  const ask = interpretChat("add uber income $400", ctx);
+  assert.match(ask.reply, /date/i);
+  assert.equal(ask.pending?.kind, "add");
+  assert.equal(ask.pending?.amount, 400);
+  assert.equal(ask.transactions, undefined);
+  const done = interpretChat("08/08/2026", { ...ctx, pending: ask.pending });
+  assert.match(done.reply, /Entry added/i);
+  assert.match(done.reply, /400/);
+  assert.match(done.reply, /2026-08-08/);
+  assert.equal(done.transactions?.[0]?.type, "income");
+  assert.equal(done.transactions?.[0]?.amount, 400);
+  assert.equal(done.transactions?.[0]?.date, "2026-08-08");
+  assert.match(done.transactions?.[0]?.note ?? "", /uber/i);
+});
+
+test("delete matching uber after add", () => {
+  const added = interpretChat("08/08/2026", {
+    ...empty(),
+    currency: "NZD",
+    pending: { kind: "add", amount: 400, note: "Uber", txType: "income", asked: "date" },
+  });
+  const txs = added.transactions ?? [];
+  assert.equal(txs.length, 2);
+  const del = interpretChat("delete uber", { ...empty(), transactions: txs, currency: "NZD" });
+  assert.match(del.reply, /Deleted/i);
+  assert.equal(del.transactions?.some((t) => /uber/i.test(t.note)), false);
+});
+
+test("edit amount of a logged coffee", () => {
+  const ctx = {
+    ...empty(),
+    currency: "NZD" as const,
+    transactions: [
+      {
+        id: "c1",
+        type: "expense" as const,
+        amount: 6.5,
+        categoryId: "drinks",
+        note: "Coffee",
+        date: "2026-08-08",
+        createdAt: "",
+      },
+    ],
+  };
+  const r = interpretChat("change coffee to $8", ctx);
+  assert.equal(r.transactions?.[0]?.amount, 8);
+  assert.match(r.reply, /8/);
+});
+
+test("how am I doing uses the grocery amount", () => {
+  const r = interpretChat("How am I doing?", { ...empty(), currency: "NZD" });
+  assert.match(r.reply, /87\.43/);
+  assert.equal(r.needsAi, true);
+  assert.doesNotMatch(r.reply, /Ask “how am I doing/i);
+  assert.doesNotMatch(r.reply, /I would file/i);
+});
+
+test("patterns mention the grocery payee not a canned blurb", () => {
+  const r = interpretChat("What patterns do you see?", { ...empty(), currency: "NZD" });
+  assert.match(r.reply, /Countdown|grocer/i);
+  assert.match(r.reply, /87\.43/);
+  assert.equal(r.needsAi, true);
+});
+
+test("add uber income learns a payee rule", () => {
+  const ask = interpretChat("add uber income $400", { ...empty(), currency: "NZD" });
+  const done = interpretChat("08/08/2026", { ...empty(), currency: "NZD", pending: ask.pending });
+  assert.equal(done.transactions?.[0]?.type, "income");
+  assert.ok((done.rules ?? []).some((r) => /uber/i.test(r.pattern)));
+});

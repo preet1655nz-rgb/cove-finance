@@ -80,6 +80,32 @@ export function buildSnapshot(state: LedgerState) {
       account: state.accounts.find((a) => a.id === t.accountId)?.name,
       transferTo: t.transfer?.otherLabel,
     }));
+  const payeeCounts = new Map<string, { name: string; n: number; amount: number; type: string }>();
+  for (const t of lived) {
+    const name = prettyPayee(t.note);
+    const key = name.toLowerCase().slice(0, 28);
+    const cur = payeeCounts.get(key) ?? { name, n: 0, amount: 0, type: t.type };
+    cur.n += 1;
+    cur.amount += t.amount;
+    payeeCounts.set(key, cur);
+  }
+  const recurring = [...payeeCounts.values()].filter((p) => p.n >= 2).sort((a, b) => b.amount - a.amount).slice(0, 8);
+  const monthsMap = new Map<string, { in: number; out: number }>();
+  for (const t of lived) {
+    const k = t.date.slice(0, 7);
+    const row = monthsMap.get(k) ?? { in: 0, out: 0 };
+    if (t.type === "income") row.in += t.amount;
+    else row.out += t.amount;
+    monthsMap.set(k, row);
+  }
+  const months = [...monthsMap.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([month, v]) => ({ month, in: round2(v.in), out: round2(v.out), net: round2(v.in - v.out) }));
+  const outliers = [...lived]
+    .filter((t) => t.type === "expense")
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 6)
+    .map((t) => ({ date: t.date, amount: round2(t.amount), note: prettyPayee(t.note).slice(0, 60), category: getCategory(t.categoryId).name }));
   return {
     currency: state.settings.currency,
     from,
@@ -98,6 +124,9 @@ export function buildSnapshot(state: LedgerState) {
     transferFlows: transferFlows(txs).slice(0, 8).map((f) => ({ to: f.to, amount: round2(f.amount), count: f.count })),
     categories,
     payees: payeeBreakdown(lived).slice(0, 12).map((p) => ({ name: p.name, amount: round2(p.amount) })),
+    recurring: recurring.map((p) => ({ name: p.name, n: p.n, amount: round2(p.amount), type: p.type })),
+    months,
+    outliers,
     other: payeeBreakdown(lived.filter((t) => t.categoryId === "other" || t.categoryId === "other-income"))
       .slice(0, 8)
       .map((p) => ({ name: p.name, amount: round2(p.amount) })),
@@ -121,6 +150,86 @@ export function buildSnapshot(state: LedgerState) {
 }
 
 export type CoveSnapshot = ReturnType<typeof buildSnapshot>;
+
+export function analyzeBooks(snap: CoveSnapshot, txs: Transaction[]) {
+  const c = snap.currency;
+  const m = (n: number) => money(n, c);
+  if (!txs.length) {
+    return "No entries yet. Upload a statement or say “add uber income $400” and I’ll log it.";
+  }
+  const lines: string[] = [];
+  lines.push(
+    `Across ${snap.from || "this ledger"} to ${snap.to || "now"} you brought in ${m(snap.livedIncome)} and spent ${m(snap.livedSpend)} (net ${m(snap.net)}${snap.savingsRate != null ? `, savings rate ${snap.savingsRate}%` : ""}). Transfers between your own accounts (${m(snap.transferred)}) are not counted as spend.`,
+  );
+  if (snap.categories.length) {
+    const top = snap.categories.filter((x) => x.type === "expense").slice(0, 4);
+    if (top.length) {
+      const share = (n: number) => (snap.livedSpend ? Math.round((n / snap.livedSpend) * 100) : 0);
+      lines.push(`Biggest lived costs: ${top.map((x) => `${x.name} ${m(x.amount)} (${share(x.amount)}%)`).join(", ")}.`);
+    }
+  }
+  if (snap.recurring.length) {
+    lines.push(
+      `Repeats I can see: ${snap.recurring
+        .slice(0, 5)
+        .map((p) => `${p.name} ×${p.n} (${m(p.amount)})`)
+        .join("; ")}. Those are the habits — change those first if you want the monthly number to move.`,
+    );
+  }
+  if (snap.months.length >= 2) {
+    const last = snap.months[snap.months.length - 1]!;
+    const prev = snap.months[snap.months.length - 2]!;
+    const delta = last.out - prev.out;
+    lines.push(
+      `${last.month} spend ${m(last.out)} vs ${prev.month} ${m(prev.out)} (${delta >= 0 ? "+" : "−"}${m(Math.abs(delta))}). Income ${last.month} ${m(last.in)}.`,
+    );
+  }
+  if (snap.outliers.length) {
+    const biggest = snap.outliers[0]!;
+    lines.push(`Largest single out: ${biggest.note} ${m(biggest.amount)} on ${biggest.date} (${biggest.category}).`);
+  }
+  const flex = snap.categories.filter((x) => ["dining", "drinks", "entertainment", "shopping", "subscriptions"].includes(x.id));
+  if (flex.length) {
+    const flexTotal = flex.reduce((s, x) => s + x.amount, 0);
+    lines.push(`Flexible lines you can cut without touching rent: ${flex.map((x) => `${x.name} ${m(x.amount)}`).join(", ")} — ${m(flexTotal)} in this window.`);
+  }
+  if (snap.other.length) {
+    lines.push(`Still in Other: ${snap.other.slice(0, 4).map((p) => p.name).join(", ")}. Tell me what those really are and I’ll retag them from now on.`);
+  }
+  if (snap.facts.length) {
+    lines.push(`I’m holding ${snap.facts.length} lesson${snap.facts.length === 1 ? "" : "s"} from you (e.g. “${snap.facts[0]}”). I’ll keep using those.`);
+  }
+  return lines.join("\n\n");
+}
+
+export function grokLedgerPayload(snap: CoveSnapshot) {
+  return {
+    currency: snap.currency,
+    window: { from: snap.from, to: snap.to, days: snap.days, entries: snap.entryCount },
+    totals: {
+      livedIn: snap.livedIncome,
+      livedOut: snap.livedSpend,
+      net: snap.net,
+      savingsRate: snap.savingsRate,
+      transferred: snap.transferred,
+      monthlySpend: snap.monthlySpend,
+      annualizedIncome: snap.annualizedIncome,
+    },
+    months: snap.months,
+    categories: snap.categories.slice(0, 10),
+    payees: snap.payees.slice(0, 10),
+    recurring: snap.recurring,
+    outliers: snap.outliers,
+    accounts: snap.accounts,
+    budgets: snap.budgets,
+    bills: snap.bills,
+    rules: snap.rules,
+    facts: snap.facts,
+    otherUntagged: snap.other,
+    recent: snap.recent.slice(0, 16),
+    transferFlows: snap.transferFlows,
+  };
+}
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -369,7 +478,7 @@ export function answerFromSnapshot(question: string, snap: CoveSnapshot, txs: Tr
     return `Annualised from your books, take-home is about ${m(monthly)} a month. A 25% housing band is ${m(band.conservative)}; 30% is ${m(band.stretch)}. Banks use their own test — this is only a comfort check.`;
   }
 
-  if (/savings rate|how am i doing|overspend|am i ok|health (of )?my (money|books)/.test(q)) {
+  if (/savings rate|overspend|am i ok|health (of )?my (money|books)/.test(q) && !/how am i doing/.test(q)) {
     const cut = snap.categories.filter((x) => ["dining", "drinks", "entertainment", "shopping"].includes(x.id));
     const hint = cut.length
       ? ` Biggest flex lines: ${cut.slice(0, 3).map((x) => `${x.name} ${m(x.amount)}`).join(", ")}.`

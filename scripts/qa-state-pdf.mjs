@@ -7,15 +7,11 @@ page.on("console", (m) => {
   if (m.type() === "error") logs.push(`error: ${m.text()}`);
 });
 page.on("pageerror", (e) => logs.push(`pageerror: ${e.message}`));
-page.on("requestfailed", (r) => logs.push(`fail: ${r.url()} ${r.failure()?.errorText}`));
 
 await page.goto("http://127.0.0.1:8080/calendar", { waitUntil: "networkidle" });
 await page.getByRole("button", { name: /statement/i }).first().click();
 await page.locator('input[type="file"]').setInputFiles("/workspace/attachments/State.pdf");
-await page.waitForFunction(() => {
-  const t = document.querySelector('[role="dialog"]')?.innerText ?? "";
-  return /to import|could not be read|no selectable text|locked/i.test(t);
-}, { timeout: 20000 });
+await page.getByText(/to import|could not|too long|photo/i).waitFor({ timeout: 25000 });
 const body = await page.getByRole("dialog").innerText();
 await page.screenshot({ path: "/workspace/screenshots/state-pdf-upload.png" });
 const ok =
@@ -23,7 +19,8 @@ const ok =
   /20 in/.test(body) &&
   /58 out/.test(body) &&
   /ANZ-style/.test(body) &&
-  !/could not be read/i.test(body);
-console.log(JSON.stringify({ ok, head: body.slice(0, 800), logs }, null, 2));
+  !/could not be read/i.test(body) &&
+  !/too long/i.test(body);
+console.log(JSON.stringify({ ok, head: body.slice(0, 500), logs }, null, 2));
 await browser.close();
 if (!ok) process.exit(1);

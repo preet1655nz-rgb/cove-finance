@@ -6,10 +6,9 @@ import { cn } from "@/lib/utils";
 
 const SUGGESTIONS = [
   "How am I doing?",
+  "Add uber income $400",
+  "What patterns do you see?",
   "Tax on 90000",
-  "GST on 115",
-  "What is KiwiSaver?",
-  "Set groceries budget to 400",
 ];
 
 export function CoveChat() {
@@ -52,7 +51,7 @@ export function CoveChat() {
             <div>
               <p className="text-sm font-medium">Ask Cove</p>
               <p className="text-[12px] text-muted-foreground">
-                Runs in this app · your ledger · NZ tax
+                Reads your ledger · add, edit, delete · NZ tax
                 {rules.length ? ` · ${rules.length} rules` : ""}
                 {accounts.length ? ` · ${accounts.length} accounts` : ""}
               </p>
@@ -64,8 +63,7 @@ export function CoveChat() {
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
             {chat.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Built into Cove and shipped on GitHub / Vercel — no outside chat service. Ask about your books, NZ tax,
-                or tell me to change a budget, payee, or entry.
+                Built into Cove. I add, edit and delete entries, spot patterns in your books, and remember what you teach me.
               </p>
             ) : (
               chat.map((m) => (

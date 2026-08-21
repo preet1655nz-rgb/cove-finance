@@ -8,6 +8,8 @@ export const BUILTIN_RULES: { re: RegExp; id: string }[] = [
   { re: /\b(dividend|interest earned|westpac interest)\b/i, id: "investments" },
   { re: /\b(sharesies|hatch|investnow|kernel|smartshares|simplicity|stake\.app|tiger broker|shares nominee)\b/i, id: "investing" },
   { re: /\b(didi mobility|uber bv)\b/i, id: "other-income" },
+  { re: /\buber eats\b/i, id: "dining" },
+  { re: /\b(uber trip|uber rides?)\b/i, id: "transport" },
   { re: /\b(gift|birthday|present from)\b/i, id: "gifts" },
   { re: /\b(tax refund|gst return)\b/i, id: "other-income" },
   { re: /\b(ird|inland revenue).*\b(iit|tax|gst|debit)\b|\b(iit|provisional tax|paye tax)\b/i, id: "tax" },

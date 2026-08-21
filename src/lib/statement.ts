@@ -24,7 +24,10 @@ export type ParseResult = {
 };
 
 const SKIP_NOTE =
-  /\b(opening balance|closing balance|brought forward|carried forward|balance (brought|carried)|opening bal|closing bal|total balance|account balance|totals at end|totals at end of page|avail(?:able)? bal(?:ance)?|ledger bal(?:ance)?|balance brought forward)\b/i;
+  /\b(opening balance|closing balance|brought forward|carried forward|balance (brought|carried)|opening bal|closing bal|total balance|account balance|totals at end|totals at end of page|avail(?:able)? bal(?:ance)?|ledger bal(?:ance)?|balance brought forward|your available credit|payment dates displayed|closing date of this statement)\b/i;
+
+const STATEMENT_CHROME =
+  /^(totals|page\s+\d|go\s*-|date\b|transaction type|withdrawals|deposits|balance\b|ap automatic|bp bill|dc direct|dd direct|vt visa|ep eftpos|text$|your available|payment dates|account number|statement period|opening|closing|continued|contact us|anz bank|available credit|please note|important information)/i;
 
 const DATE_H = /\b(date|posted|posting|processed|value date|dtposted|txn date|effective|transaction date|tran date)\b/i;
 const AMOUNT_H = /^(amount|value|sum|aud|nzd|usd|gbp|eur|cad|transaction amount|trnamt|txn amount)$/i;
@@ -95,21 +98,55 @@ export async function readStatementFile(file: File, password?: string): Promise<
     }
     if (kind === "pdf" || (namedPdf && kind !== "image")) {
       try {
-        const { extractPdfText, PdfOpenError } = await import("./pdf-statement");
-        const text = await Promise.race([
-          extractPdfText(buf, password),
-          new Promise<string>((_, reject) => {
-            setTimeout(() => reject(new PdfOpenError("That PDF took too long to read. Try a one-month CSV export.", "timeout")), 45000);
-          }),
-        ]);
-        const parsed = parseBankStatement(text, file.name || "statement.pdf");
-        if (!parsed.ok) {
-          return fail(
-            parsed.error ??
-              "No dates and amounts were found in that PDF. Download the CSV from internet banking instead.",
-          );
+        // Fast path: inflate FlateDecode streams. Never loads the 1.2MB pdf.js
+        // worker, so ANZ Go (and similar) cannot hit the timeout.
+        const { extractPdfFallback, looksLikeLedger } = await import("./pdf-fallback");
+        let fallback = "";
+        try {
+          fallback = await Promise.race([
+            extractPdfFallback(buf),
+            new Promise<string>((resolve) => setTimeout(() => resolve(""), 6000)),
+          ]);
+        } catch {
+          fallback = "";
         }
-        return parsed;
+        if (looksLikeLedger(fallback)) {
+          const parsed = parseBankStatement(fallback, file.name || "statement.pdf");
+          if (parsed.ok) return parsed;
+        }
+
+        const { extractPdfText, PdfOpenError } = await import("./pdf-statement");
+        try {
+          const text = await Promise.race([
+            extractPdfText(buf, password),
+            new Promise<string>((_, reject) => {
+              setTimeout(
+                () => reject(new PdfOpenError("That PDF could not be read quickly enough. Try a CSV from internet banking.", "timeout")),
+                10000,
+              );
+            }),
+          ]);
+          const parsed = parseBankStatement(text, file.name || "statement.pdf");
+          if (!parsed.ok && looksLikeLedger(fallback)) {
+            return parseBankStatement(fallback, file.name || "statement.pdf");
+          }
+          if (!parsed.ok) {
+            return fail(
+              parsed.error ??
+                "No dates and amounts were found in that PDF. Download the CSV from internet banking instead.",
+            );
+          }
+          return parsed;
+        } catch (err) {
+          if (looksLikeLedger(fallback)) {
+            const parsed = parseBankStatement(fallback, file.name || "statement.pdf");
+            if (parsed.ok) return parsed;
+          }
+          if (err instanceof PdfOpenError) {
+            return fail(err.message, { needsPassword: err.kind === "password" });
+          }
+          throw err;
+        }
       } catch (err) {
         const { PdfOpenError } = await import("./pdf-statement");
         if (err instanceof PdfOpenError) {
@@ -346,18 +383,17 @@ function parseAnzLedger(text: string, yearHint: number): Omit<StatementDraft, "k
     .split("\n")
     .map((l) => l.replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ").trim())
     .filter(Boolean);
-  const skipMerge =
-    /^(totals|page |go -|date\b|transaction type|withdrawals|deposits|balance|ap automatic|bp bill|dc direct|dd direct|vt visa|ep eftpos|text$|your available|payment dates)/i;
+  const skipMerge = STATEMENT_CHROME;
   const merged: string[] = [];
   for (const line of lines) {
-    if (ANZ_DATE.test(line)) merged.push(line);
-    else if (merged.length && !skipMerge.test(line) && !/available credit|closing date of this statement/i.test(line)) {
+    if (ANZ_DATE.test(line) && !STATEMENT_CHROME.test(line) && !SKIP_NOTE.test(line)) merged.push(line);
+    else if (merged.length && !skipMerge.test(line) && !SKIP_NOTE.test(line) && !/available credit|closing date of this statement|page \d+ of \d+/i.test(line)) {
       merged[merged.length - 1] += ` ${line}`;
     }
   }
   const out: Omit<StatementDraft, "key" | "duplicate" | "included">[] = [];
   for (const line of merged) {
-    if (SKIP_NOTE.test(line) || /totals at end|available credit/i.test(line)) continue;
+    if (SKIP_NOTE.test(line) || /totals at end|available credit|page \d+ of \d+/i.test(line)) continue;
     const dm = line.match(
       /^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[,\s]+(.*)$/i,
     );
@@ -369,6 +405,8 @@ function parseAnzLedger(text: string, yearHint: number): Omit<StatementDraft, "k
       .replace(/\bYour available credit\b[\s\S]*$/i, "")
       .replace(/\bTotals at end[\s\S]*$/i, "")
       .replace(/\bPayment dates displayed[\s\S]*$/i, "")
+      .replace(/\bPage\s+\d+\s+of\s+\d+\b[\s\S]*$/i, "")
+      .replace(/\bGo\s*-\s*continued\b/gi, "")
       .replace(/\bText(?:\s+text)+\b[\s\S]*$/i, "")
       .trim();
     const tm = rest.match(ANZ_CODE);
@@ -384,7 +422,8 @@ function parseAnzLedger(text: string, yearHint: number): Omit<StatementDraft, "k
     let note = rest;
     for (const am of moneyMatches) note = note.split(am).join("");
     note = [code, note.replace(/\s+/g, " ").trim()].filter(Boolean).join(" ");
-    if (SKIP_NOTE.test(note)) continue;
+    if (SKIP_NOTE.test(note) || STATEMENT_CHROME.test(note) || /page \d+ of \d+/i.test(note)) continue;
+    if (!code && note.length < 3) continue;
     const type: TxType =
       code === "DC" || /\b(wage\/salary|credit transfer|direct credit)\b/i.test(note) ? "income" : "expense";
     out.push({
@@ -405,7 +444,7 @@ function parseGenericLedger(text: string, yearHint: number): Omit<StatementDraft
     .filter(Boolean);
   const out: Omit<StatementDraft, "key" | "duplicate" | "included">[] = [];
   for (const line of lines) {
-    if (SKIP_NOTE.test(line) || /^(date\b|transaction|page |totals|statement |account |opening|closing)/i.test(line)) continue;
+    if (SKIP_NOTE.test(line) || STATEMENT_CHROME.test(line) || /^(date\b|transaction|page |totals|statement |account |opening|closing)/i.test(line)) continue;
     let date: string | null = null;
     let rest = line;
     const isoD = line.match(/^(\d{4}[/.\-]\d{1,2}[/.\-]\d{1,2})\s+(.*)$/);

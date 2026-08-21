@@ -1,7 +1,9 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { getCategory } from "./categories";
-import { interpretChat } from "./chat-brain";
+import { interpretChat, type PendingIntent } from "./chat-brain";
+import { askGrokAboutBooks } from "./cove-ai";
+import { buildSnapshot, grokLedgerPayload } from "./cove-expert";
 import { applyRulesToTxs, classifyNote, pairTransfers } from "./intelligence";
 import { buildNotices } from "./notify";
 import { spentInCategory } from "./period";
@@ -39,6 +41,7 @@ type FinanceState = {
   chat: ChatMessage[];
   chatOpen: boolean;
   chatBusy: boolean;
+  covePending: PendingIntent | null;
   importAccountId: string | null;
   settings: Settings;
   period: "this-month" | "last-month" | "quarter" | "year" | "all";
@@ -107,6 +110,7 @@ export const useFinanceStore = create<FinanceState>()(
       chat: [],
       chatOpen: false,
       chatBusy: false,
+      covePending: null,
       importAccountId: null,
       settings: defaultSettings,
       period: "this-month",
@@ -262,6 +266,7 @@ export const useFinanceStore = create<FinanceState>()(
             budgets: [],
             bills: [],
             notices: [],
+            covePending: null,
           }),
         ),
       importData: (raw) => {
@@ -348,7 +353,6 @@ export const useFinanceStore = create<FinanceState>()(
         if (!trimmed) return "";
         const user: ChatMessage = { id: uid(), role: "user", text: trimmed, at: new Date().toISOString() };
         set({ chat: [...get().chat, user].slice(-60), chatBusy: true, chatOpen: true });
-        await new Promise((r) => setTimeout(r, 40));
         const s = get();
         const ledger = {
           transactions: s.transactions,
@@ -358,6 +362,7 @@ export const useFinanceStore = create<FinanceState>()(
           bills: s.bills,
           facts: s.facts,
           settings: s.settings,
+          pending: s.covePending,
         };
         const compact = (next: Partial<FinanceState>) =>
           Object.fromEntries(Object.entries(next).filter(([, v]) => v !== undefined)) as Partial<FinanceState>;
@@ -365,7 +370,23 @@ export const useFinanceStore = create<FinanceState>()(
           ...ledger,
           currency: s.settings.currency,
         });
-        const cove: ChatMessage = { id: uid(), role: "cove", text: effect.reply, at: new Date().toISOString() };
+        let reply = effect.reply;
+        if (effect.needsAi || effect.handled === false) {
+          try {
+            const snap = buildSnapshot(ledger);
+            const grok = await askGrokAboutBooks({
+              data: {
+                question: trimmed,
+                snapshot: JSON.stringify(grokLedgerPayload(snap)),
+                history: get().chat.slice(-16).map((m) => ({ role: m.role, text: m.text })),
+              },
+            });
+            if (grok.ok && grok.text) reply = grok.text;
+          } catch {
+            /* local analysis already in effect.reply */
+          }
+        }
+        const cove: ChatMessage = { id: uid(), role: "cove", text: reply, at: new Date().toISOString() };
         const chat = [...get().chat, cove].slice(-60);
         const patch = compact({
           rules: effect.rules,
@@ -376,12 +397,13 @@ export const useFinanceStore = create<FinanceState>()(
           facts: effect.facts,
           settings: effect.settings,
         });
+        const covePending = effect.pending === undefined ? get().covePending : effect.pending;
         if (patch.transactions || patch.budgets || patch.bills) {
-          set(withNotices({ ...get(), ...patch, chat, chatBusy: false, notices: get().notices }));
+          set(withNotices({ ...get(), ...patch, chat, chatBusy: false, covePending, notices: get().notices }));
         } else {
-          set({ ...patch, chat, chatBusy: false });
+          set({ ...patch, chat, chatBusy: false, covePending });
         }
-        return effect.reply;
+        return reply;
       },
     }),
     {
@@ -398,6 +420,7 @@ export const useFinanceStore = create<FinanceState>()(
         rules: s.rules,
         facts: s.facts,
         chat: s.chat,
+        covePending: s.covePending,
       }),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<FinanceState>;
