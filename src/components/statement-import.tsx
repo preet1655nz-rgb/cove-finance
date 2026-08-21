@@ -196,8 +196,10 @@ export function StatementImport() {
               )}
             >
               <Upload className="size-5 text-muted-foreground" strokeWidth={1.75} />
-              <p className="text-sm font-medium">{busy ? "Reading…" : "Drop a statement here"}</p>
-              <p className="text-[12px] text-muted-foreground">PDF or CSV — or click to choose a file</p>
+              <p className="text-sm font-medium">{busy ? "Reading…" : "Drop a bank PDF here"}</p>
+              <p className="max-w-xs text-[12px] text-muted-foreground">
+                ANZ Go statements, CSV, OFX or QIF. Withdrawals become expenses, deposits become income.
+              </p>
             </button>
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
             <div className="flex flex-wrap gap-2">
@@ -299,7 +301,7 @@ export function StatementImport() {
 
 function TypeToggle({ value, onChange }: { value: TxType; onChange: (t: TxType) => void }) {
   return (
-    <div className="flex shrink-0 flex-nowrap rounded-md bg-muted p-0.5">
+    <div className="grid shrink-0 grid-cols-2 rounded-md bg-muted p-0.5">
       {(["expense", "income"] as const).map((t) => (
         <button
           key={t}

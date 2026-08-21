@@ -1,7 +1,8 @@
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
+import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 if (typeof window !== "undefined") {
-  GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+  GlobalWorkerOptions.workerSrc = pdfWorker;
 }
 
 type TextItem = { str: string; transform: number[] };
@@ -24,7 +25,7 @@ export async function extractPdfText(data: ArrayBuffer): Promise<string> {
       const str = item.str.replace(/\s+/g, " ").trim();
       if (!str) continue;
       const x = item.transform[4] ?? 0;
-      const y = Math.round(item.transform[5] ?? 0);
+      const y = Math.round((item.transform[5] ?? 0) * 2) / 2;
       const row = buckets.get(y) ?? [];
       row.push({ x, str });
       buckets.set(y, row);

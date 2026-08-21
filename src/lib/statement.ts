@@ -331,7 +331,7 @@ function parseAnzLedger(text: string, yearHint: number): Omit<StatementDraft, "k
     if (amount == null || amount === 0) continue;
     let note = rest;
     for (const am of moneyMatches) note = note.split(am).join("");
-    note = joinNote([code, note]);
+    note = [code, note.replace(/\s+/g, " ").trim()].filter(Boolean).join(" ");
     if (SKIP_NOTE.test(note)) continue;
     const type: TxType =
       code === "DC" || /\b(wage\/salary|credit transfer|direct credit)\b/i.test(note) ? "income" : "expense";

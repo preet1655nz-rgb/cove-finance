@@ -46,7 +46,7 @@ try {
   const dialog = page.locator('[role="dialog"]');
   if (!/PDF/i.test(await dialog.innerText())) fail("Upload dialog does not mention PDF");
 
-  await page.locator('input[type="file"]').setInputFiles(join(fixtures, "anz-go.pdf"));
+  await page.locator('input[type="file"][accept*="pdf"]').setInputFiles(join(fixtures, "anz-go.pdf"));
   const reviewReady = page.locator('[role="dialog"] li').first();
   try {
     await reviewReady.waitFor({ timeout: 20000 });

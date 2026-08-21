@@ -35,6 +35,10 @@ export function formatDay(iso: string) {
   return format(parseISO(iso), "d MMM");
 }
 
+export function formatStatementDay(iso: string) {
+  return format(parseISO(iso), "dd MMM");
+}
+
 export function formatDayLong(iso: string) {
   return format(parseISO(iso), "EEE d MMM");
 }

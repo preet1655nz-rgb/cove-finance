@@ -1,5 +1,5 @@
 import { format, parseISO } from "date-fns";
-import { formatDay, money, plainMoney } from "@/lib/format";
+import { formatStatementDay, money, plainMoney } from "@/lib/format";
 import { useFinanceStore } from "@/lib/store";
 import type { Transaction } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -77,6 +77,20 @@ export function buildMonthLedger(txs: Transaction[], month: string): LedgerRow[]
   return rows;
 }
 
+function splitNote(note: string) {
+  const m = note.match(/^(DD|DC|BP|AP|VT|EP|AT|CQ|ED|FX|IA|IP|IF|TP)\s+(.*)$/i);
+  if (m) return { code: m[1].toUpperCase(), rest: m[2] };
+  return { code: "", rest: note };
+}
+
+function detailLines(note: string) {
+  const { code, rest } = splitNote(note);
+  const card = rest.match(/^(.*?)(\d{6}\*{4,}\d+.*)$/);
+  const primary = card ? card[1].trim() : rest;
+  const secondary = card ? card[2].trim() : "";
+  return { code, primary, secondary };
+}
+
 export function StatementLedger({
   rows,
   selectedDate,
@@ -89,42 +103,43 @@ export function StatementLedger({
   const currency = useFinanceStore((s) => s.settings.currency);
   const startEdit = useFinanceStore((s) => s.startEdit);
   const total = rows.find((r) => r.kind === "total");
+  const txs = rows.filter((r) => r.kind === "tx").length;
 
   return (
     <section className="overflow-hidden rounded-xl bg-card shadow-card">
-      <div className="flex items-end justify-between gap-3 border-b border-foreground/15 px-4 pt-5 pb-3 sm:px-5">
+      <div className="flex items-end justify-between gap-3 border-b border-chart-3/30 px-4 pt-5 pb-3 sm:px-6">
         <div>
-          <p className="text-[13px] font-medium tracking-wide text-chart-3">Go</p>
+          <p className="text-[13px] font-medium tracking-wide text-chart-3">Go — continued</p>
           <h2 className="font-display text-2xl tracking-tight">Statement</h2>
         </div>
-        {total ? (
-          <p className="text-right text-[12px] text-muted-foreground">
-            Closing {money(total.balance, currency)}
-          </p>
-        ) : null}
+        <p className="text-right text-[12px] text-muted-foreground">
+          {txs} {txs === 1 ? "entry" : "entries"}
+          {total ? ` · closing ${money(total.balance, currency)}` : ""}
+        </p>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] border-collapse text-[13px]">
+        <table className="w-full min-w-[680px] border-collapse text-[13px]">
           <thead>
-            <tr className="border-b border-foreground/20 text-left text-[11px] tracking-wide text-muted-foreground uppercase">
-              <th className="px-4 py-2.5 font-medium sm:px-5">Date</th>
+            <tr className="border-b border-chart-3/40 text-left text-[11px] tracking-wide text-muted-foreground">
+              <th className="px-4 py-2.5 font-medium sm:px-6">Date</th>
               <th className="px-2 py-2.5 font-medium">Transaction type and details</th>
               <th className="px-2 py-2.5 text-right font-medium">Withdrawals</th>
               <th className="px-2 py-2.5 text-right font-medium">Deposits</th>
-              <th className="px-4 py-2.5 text-right font-medium sm:px-5">Balance</th>
+              <th className="px-4 py-2.5 text-right font-medium sm:px-6">Balance</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => {
               const on = row.kind === "tx" && row.date === selectedDate;
               const clickable = row.kind === "tx";
+              const details = detailLines(row.note);
               return (
                 <tr
                   key={row.id}
                   className={cn(
-                    "border-b border-border/70",
+                    "border-b border-border/80",
                     row.kind === "opening" && "font-medium",
-                    row.kind === "total" && "bg-secondary font-medium",
+                    row.kind === "total" && "bg-chart-3/10 font-medium",
                     on && "bg-muted",
                     clickable && "cursor-pointer hover:bg-muted/70",
                   )}
@@ -132,23 +147,29 @@ export function StatementLedger({
                     if (row.kind === "tx" && row.date) onSelectDate(row.date);
                   }}
                 >
-                  <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-muted-foreground sm:px-5">
-                    {row.date ? formatDay(row.date) : ""}
+                  <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-muted-foreground sm:px-6">
+                    {row.date ? formatStatementDay(row.date) : ""}
                   </td>
-                  <td className="max-w-[280px] px-2 py-2.5">
-                    {row.kind === "tx" && row.tx ? (
+                  <td className="max-w-[340px] px-2 py-2.5">
+                    {row.kind === "tx" ? (
                       <button
                         type="button"
-                        className="block max-w-full truncate text-left font-medium"
+                        className="block max-w-full text-left"
                         onClick={(e) => {
                           e.stopPropagation();
-                          startEdit(row.tx!);
+                          if (row.tx) startEdit(row.tx);
                         }}
                       >
-                        {row.note}
+                        <span className="font-medium">
+                          {details.code ? `${details.code}  ` : ""}
+                          {details.primary}
+                        </span>
+                        {details.secondary ? (
+                          <span className="mt-0.5 block text-[12px] text-muted-foreground">{details.secondary}</span>
+                        ) : null}
                       </button>
                     ) : (
-                      <span className={cn(row.kind === "total" && "font-medium")}>{row.note}</span>
+                      <span>{row.note}</span>
                     )}
                   </td>
                   <td className="whitespace-nowrap px-2 py-2.5 text-right tabular-nums">
@@ -157,7 +178,7 @@ export function StatementLedger({
                   <td className="whitespace-nowrap px-2 py-2.5 text-right tabular-nums text-income">
                     {amountCell(row.deposit, row.kind === "total", currency, true)}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums sm:px-5">
+                  <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums sm:px-6">
                     {row.kind === "total" ? money(row.balance, currency) : plainMoney(row.balance)}
                   </td>
                 </tr>
@@ -166,7 +187,7 @@ export function StatementLedger({
           </tbody>
         </table>
       </div>
-      <p className="flex flex-wrap gap-x-4 gap-y-1 px-4 py-3 text-[10px] tracking-wide text-muted-foreground uppercase sm:px-5">
+      <p className="flex flex-wrap gap-x-4 gap-y-1 px-4 py-3 text-[10px] tracking-wide text-muted-foreground sm:px-6">
         <span>AP Automatic Payment</span>
         <span>BP Bill Payment</span>
         <span>DC Direct Credit</span>

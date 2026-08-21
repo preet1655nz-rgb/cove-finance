@@ -15,7 +15,6 @@ import { ChevronLeft, ChevronRight, Upload } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { PageFrame } from "@/components/page-frame";
 import { StatementLedger, buildMonthLedger } from "@/components/statement-ledger";
-import { TransactionRow } from "@/components/transaction-row";
 import { Button } from "@/components/ui/button";
 import { formatMonth, money, signedMoney } from "@/lib/format";
 import { useFinanceStore } from "@/lib/store";
@@ -198,7 +197,7 @@ function CalendarView() {
                   setSelected(iso);
                 }}
                 className={cn(
-                  "flex min-h-14 flex-col items-center justify-start gap-1 rounded-md px-0.5 py-1.5 sm:min-h-16",
+                  "flex min-h-11 flex-col items-center justify-start gap-1 rounded-md px-0.5 py-1.5 sm:min-h-12",
                   on ? "bg-primary text-primary-foreground" : "hover:bg-muted/70",
                   !inMonth && !on && "opacity-40",
                   isTodayCell && !on && "ring-1 ring-foreground/30",
@@ -234,23 +233,24 @@ function CalendarView() {
 
       <StatementLedger rows={ledger} selectedDate={selectedIso} onSelectDate={setSelected} />
 
-      <section className="rounded-xl bg-card p-5 shadow-card">
-        <div className="mb-3 flex items-baseline justify-between gap-3">
-          <h2 className="text-sm font-medium">{format(parseISO(selectedIso), "EEEE d MMMM")}</h2>
-          <Button variant="ghost" size="sm" onClick={() => setAddOpen(true, { date: selectedIso })}>
-            Add for this day
-          </Button>
+      <section className="flex items-center justify-between gap-3 rounded-xl bg-card px-5 py-4 shadow-card">
+        <div>
+          <p className="text-sm font-medium">{format(parseISO(selectedIso), "EEEE d MMMM")}</p>
+          {dayBills.length ? (
+            <p className="mt-1 text-[12px] text-muted-foreground">
+              Bill{dayBills.length === 1 ? "" : "s"} due: {dayBills.map((b) => b.name).join(", ")}
+            </p>
+          ) : (
+            <p className="mt-1 text-[12px] text-muted-foreground">
+              {selectedTxs.length
+                ? `${selectedTxs.length} on this day — tap a row above to edit`
+                : "Nothing on this day yet"}
+            </p>
+          )}
         </div>
-        {dayBills.length ? (
-          <p className="mb-3 text-[12px] text-muted-foreground">
-            Bill{dayBills.length === 1 ? "" : "s"} due: {dayBills.map((b) => b.name).join(", ")}
-          </p>
-        ) : null}
-        {selectedTxs.length ? (
-          selectedTxs.map((tx) => <TransactionRow key={tx.id} tx={tx} />)
-        ) : (
-          <p className="py-8 text-sm text-muted-foreground">Nothing on this day yet.</p>
-        )}
+        <Button variant="outline" onClick={() => setAddOpen(true, { date: selectedIso })}>
+          Add for this day
+        </Button>
       </section>
     </div>
   );
