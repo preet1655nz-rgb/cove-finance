@@ -1,6 +1,6 @@
 import { inflate } from "pako";
 
-/** Worker-free reader for bank PDFs (FlateDecode and uncompressed content). */
+/** Worker-free reader for bank PDFs (FlateDecode, Form XObjects, uncompressed). */
 
 export function hasText(text: string) {
   return text.replace(/\s+/g, "").length >= 8;
@@ -14,12 +14,30 @@ export function looksLikeLedger(text: string) {
     if (!hasMoney) continue;
     if (/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i.test(line)) hits += 1;
     else if (/\b\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}\b/.test(line)) hits += 1;
-    else if (/\b(?:DD|DC|BP|AP|VT|EP|AT)\b/.test(line)) hits += 1;
+    else if (/\b(?:DD|DC|BP|AP|VT|EP|AT|DR)\b/.test(line)) hits += 1;
   }
   return hits >= 2;
 }
 
 type TextItem = { str?: string; transform?: number[] };
+
+function joinRow(cells: { x: number; str: string }[]) {
+  const sorted = [...cells].sort((a, b) => a.x - b.x);
+  let out = "";
+  let prev: { x: number; str: string } | null = null;
+  for (const c of sorted) {
+    if (!prev) {
+      out = c.str;
+      prev = c;
+      continue;
+    }
+    const gap = c.x - prev.x;
+    const letter = prev.str.length <= 2 && c.str.length <= 2 && gap > 0 && gap < 90;
+    out += letter ? c.str : ` ${c.str}`;
+    prev = c;
+  }
+  return out.replace(/\s+/g, " ").trim();
+}
 
 export function itemsToText(items: unknown[]) {
   const buckets = new Map<number, { x: number; str: string }[]>();
@@ -58,12 +76,7 @@ export function itemsToText(items: unknown[]) {
   }
   const lines = [...combined.keys()]
     .sort((a, b) => b - a)
-    .map((y) =>
-      (combined.get(y) ?? [])
-        .sort((a, b) => a.x - b.x)
-        .map((c) => c.str)
-        .join(" "),
-    );
+    .map((y) => joinRow(combined.get(y) ?? []));
   return { lines: lines.join("\n"), loose: loose.join(" ") };
 }
 
@@ -164,28 +177,51 @@ function pakoDecompressStream(format: string) {
 
 type PdfStream = { bytes: Uint8Array; flate: boolean };
 
+/** Dictionary immediately before `stream`, walking nested `<< >>`. */
+function dictBeforeStream(latin: string, streamIdx: number) {
+  let j = streamIdx - 1;
+  while (j >= 0 && /\s/.test(latin[j])) j -= 1;
+  if (j < 1 || latin[j - 1] !== ">" || latin[j] !== ">") {
+    return latin.slice(Math.max(0, streamIdx - 400), streamIdx);
+  }
+  let depth = 0;
+  for (let i = j; i >= 1; i -= 1) {
+    if (latin[i - 1] === ">" && latin[i] === ">") depth += 1;
+    else if (latin[i - 1] === "<" && latin[i] === "<") {
+      depth -= 1;
+      if (depth === 0) return latin.slice(i - 1, streamIdx);
+    }
+  }
+  return latin.slice(Math.max(0, streamIdx - 400), streamIdx);
+}
+
+function directLength(dict: string) {
+  const hits = [...dict.matchAll(/\/Length\s+(\d+)(?!\s+\d+\s+R)/g)];
+  if (!hits.length) return null;
+  const n = Number(hits[hits.length - 1][1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function allStreams(bytes: Uint8Array): PdfStream[] {
   const latin = new TextDecoder("latin1").decode(bytes);
   const out: PdfStream[] = [];
   const re = /(?<!end)stream\r?\n/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(latin))) {
-    const dict = latin.slice(Math.max(0, match.index - 2500), match.index);
+    const dict = dictBeforeStream(latin, match.index);
     if (/\/Subtype\s*\/Image\b/i.test(dict)) continue;
     if (/\/Type\s*\/XRef\b/i.test(dict)) continue;
     if (/\/Type\s*\/Metadata\b/i.test(dict)) continue;
     if (/\/Type\s*\/ObjStm\b/i.test(dict)) continue;
+    if (/\/Length1\b/.test(dict) && /\/Length2\b/.test(dict)) continue;
     const start = match.index + match[0].length;
     const end = latin.indexOf("endstream", start);
     if (end < 0) continue;
     const flate = /\/FlateDecode\b/.test(dict);
-    const indirectLength = /\/Length\s+\d+\s+\d+\s+R\b/.test(dict);
-    const lengthMatch = !indirectLength ? dict.match(/\/Length\s+(\d+)\b/) : null;
+    const n = directLength(dict);
     let slice = bytes.subarray(start, end);
-    if (lengthMatch) {
-      const n = Number(lengthMatch[1]);
-      if (n > 0 && start + n <= bytes.byteLength) slice = bytes.subarray(start, start + n);
-    } else {
+    if (n != null && start + n <= bytes.byteLength) slice = bytes.subarray(start, start + n);
+    else {
       if (slice.length && slice[slice.length - 1] === 10) slice = slice.subarray(0, slice.length - 1);
       if (slice.length && slice[slice.length - 1] === 13) slice = slice.subarray(0, slice.length - 1);
     }
@@ -288,7 +324,12 @@ export async function extractPdfFallback(data: ArrayBuffer): Promise<string> {
       loosePages.push(loose);
     }
   }
-  const lined = pages.join("\n");
-  const loose = loosePages.join("\n");
+  const packed = pages.map((lines, i) => {
+    const m = lines.match(/Page\s+(\d+)\s+of\s+\d+/i);
+    return { lines, loose: loosePages[i] ?? "", n: m ? Number(m[1]) : 1000 + i };
+  });
+  packed.sort((a, b) => a.n - b.n);
+  const lined = packed.map((p) => p.lines).join("\n");
+  const loose = packed.map((p) => p.loose).join("\n");
   return lined.length >= loose.length ? lined : `${lined}\n${loose}`;
 }

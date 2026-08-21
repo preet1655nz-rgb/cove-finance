@@ -296,7 +296,7 @@ function assertAnzGo(result: ReturnType<typeof parseBankStatement>, label: strin
   const didi = result.rows.find((r) => /didi/i.test(r.note) && r.amount === 228.44);
   assert.ok(didi);
   assert.equal(didi!.type, "income");
-  assert.equal(didi!.categoryId, "other-income");
+  assert.equal(didi!.categoryId, "gig");
 
   const waitomo = result.rows.find((r) => /waitomo/i.test(r.note) && r.amount === 34.18);
   assert.ok(waitomo);
@@ -361,6 +361,17 @@ test("real ANZ Go pages 2–3 keep page totals and ignore the footer", () => {
     result.rows.some((r) => /available credit|totals at end/i.test(r.note)),
     false,
   );
+  assert.equal(
+    result.rows.some((r) => /\*{3,}|orig date/i.test(r.note)),
+    false,
+    "card masks and orig-date trailers should be stripped",
+  );
+  assert.equal(result.rows.find((r) => /warehous/i.test(r.note) && r.amount === 8.99)?.categoryId, "shopping");
+  assert.equal(result.rows.find((r) => /sprint fit/i.test(r.note))?.categoryId, "health");
+  assert.equal(result.rows.find((r) => /perfume/i.test(r.note))?.categoryId, "shopping");
+  assert.equal(result.rows.find((r) => /didi/i.test(r.note) && r.amount === 228.44)?.categoryId, "gig");
+  assert.equal(result.rows.find((r) => /uber bv/i.test(r.note) && r.amount === 495.74)?.categoryId, "gig");
+  assert.equal(result.rows.filter((r) => r.categoryId === "other").length, 0);
 });
 
 function csvToAnzLedger(csv: string) {
@@ -405,3 +416,45 @@ function parseCsvLine(line: string) {
   cells.push(cur);
   return cells;
 }
+
+test("full ANZ Go statement 20 Jun–19 Aug 2026 reads 51 posted rows and ignores chrome", () => {
+  const text = readFileSync(join(fixtures, "anz-go-full-2026-08-19.txt"), "utf8");
+  const result = parseBankStatement(text, "01-0798-0922177-00_Statement_2026-08-19.pdf");
+  assert.equal(result.ok, true, result.error);
+  assert.equal(result.format, "anz-ledger");
+  assert.equal(result.rows.length, 51);
+  const income = result.rows.filter((r) => r.type === "income").reduce((s, r) => s + r.amount, 0);
+  const expense = result.rows.filter((r) => r.type === "expense").reduce((s, r) => s + r.amount, 0);
+  assert.equal(Number(income.toFixed(2)), 5832);
+  assert.equal(Number(expense.toFixed(2)), 5900.05);
+  assert.equal(result.rows.filter((r) => r.type === "income").length, 17);
+  assert.equal(
+    result.rows.some((r) => /opening balance|available credit|totals at end|brought forward/i.test(r.note)),
+    false,
+  );
+  const saini = result.rows.find((r) => /saini.*deposit/i.test(r.note) && r.amount === 1000);
+  assert.ok(saini);
+  assert.equal(saini!.type, "income");
+  assert.equal(saini!.categoryId, "transfer-in");
+  const quinovic = result.rows.filter((r) => /quinovic/i.test(r.note));
+  assert.equal(quinovic.length, 4);
+  assert.ok(quinovic.every((r) => r.type === "expense" && r.amount === 495 && r.categoryId === "housing"));
+  const seaview = result.rows.filter((r) => /seaview/i.test(r.note));
+  assert.equal(seaview.length, 2);
+  assert.ok(seaview.every((r) => r.amount === 950 && r.categoryId === "housing"));
+  const oneNz = result.rows.filter((r) => /one new zealand/i.test(r.note));
+  assert.ok(oneNz.length >= 2);
+  assert.ok(oneNz.every((r) => r.categoryId === "utilities"));
+  const interest = result.rows.filter((r) => /interest/i.test(r.note));
+  assert.ok(interest.every((r) => r.type === "expense" && r.categoryId === "other"));
+  const transferOut = result.rows.find((r) => r.amount === 100 && /debit transfer/i.test(r.note));
+  assert.equal(transferOut?.type, "expense");
+  assert.equal(transferOut?.categoryId, "transfer-out");
+  const electriIn = result.rows.find((r) => /electri/i.test(r.note));
+  assert.equal(electriIn?.type, "income");
+  assert.equal(electriIn?.categoryId, "transfer-in");
+  const janssens = result.rows.filter((r) => /janssens|debitsuccess/i.test(r.note) && r.type === "expense");
+  assert.equal(janssens.length, 4);
+  assert.ok(janssens.every((r) => r.categoryId === "insurance"));
+});
+

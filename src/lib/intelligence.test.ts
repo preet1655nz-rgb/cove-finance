@@ -26,6 +26,38 @@ test("IRD IIT debit is tax, wage credit is salary", () => {
   assert.equal(classifyNote("DC Inland Revenue Wage/salary Wage/salary", "income").categoryId, "salary");
 });
 
+test("truncated ANZ merchants and gig income get real categories", () => {
+  assert.equal(classifyNote("VT THE WAREHOUS", "expense").categoryId, "shopping");
+  assert.equal(classifyNote("VT THE WAREHOUSE 8.99", "expense").categoryId, "shopping");
+  assert.equal(classifyNote("VT SPRINT FIT", "expense").categoryId, "health");
+  assert.equal(classifyNote("BP Sp Nze Mobile Pmt Perfume", "expense").categoryId, "shopping");
+  assert.equal(classifyNote("DC UBER BV UBER: TXN ID", "income").categoryId, "gig");
+  assert.equal(classifyNote("DC DIDI MOBILITY (NEW Z NAAL/PAYMENT S", "income").categoryId, "gig");
+  assert.equal(classifyNote("VT AIRBNB", "expense").categoryId, "travel");
+  assert.equal(classifyNote("VT KMART - RICC", "expense").categoryId, "shopping");
+});
+
+test("this household statement tags rent, power, insurance, and internal transfers", () => {
+  assert.equal(classifyNote("AP Quinovic AV160087.002 RENT 7LEAGUE", "expense").categoryId, "housing");
+  assert.equal(classifyNote("AP Seaview trust AUTOMATIC PAYMENT", "expense").categoryId, "housing");
+  assert.equal(classifyNote("DD One New Zealand Grou 516168007", "expense").categoryId, "utilities");
+  assert.equal(classifyNote("DD CONTACT ENERGY L 000501700494", "expense").categoryId, "utilities");
+  assert.equal(classifyNote("DD DEBITSUCCESS JANSSENS INS JNSN835675", "expense").categoryId, "insurance");
+  assert.equal(classifyNote("VT Pak n Save M 483561", "expense").categoryId, "groceries");
+  assert.equal(classifyNote("VT IN A SPIN LA", "expense").categoryId, "household");
+  assert.equal(classifyNote("VT LOGMATE* LOG", "expense").categoryId, "household");
+  assert.equal(classifyNote("VT ESPRESSO STU", "expense").categoryId, "drinks");
+  assert.equal(classifyNote("VT BP CONNECT D", "expense").categoryId, "transport");
+  assert.equal(classifyNote("AP SAINI,GURPREE DEPOSIT", "income").categoryId, "transfer-in");
+  assert.equal(classifyNote("DC 06-0807-0355363-00 CREDIT TRANSFER 195312", "income").categoryId, "transfer-in");
+  assert.equal(classifyNote("DD 06-0807-0355363-00 DEBIT TRANSFER 140731", "expense").categoryId, "transfer-out");
+  assert.equal(classifyNote("WESTPAC · INTEREST", "income").categoryId, "investments");
+  assert.equal(classifyNote("DD 01-0798-0922177-00 Electri", "expense").categoryId, "utilities");
+  assert.equal(classifyNote("DC 06-0807-0355363-00 Electri", "income").categoryId, "transfer-in");
+  assert.equal(classifyNote("DC 06-0807-0355363-00 Rent", "income").categoryId, "transfer-in");
+  assert.equal(classifyNote("DR INTEREST", "expense").categoryId, "other");
+});
+
 test("chat rule retags sharesies and transfer pairing", () => {
   const a = "acc-a";
   const b = "acc-b";

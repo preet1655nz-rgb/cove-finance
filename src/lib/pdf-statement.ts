@@ -126,6 +126,16 @@ function betterText(a: string, b: string) {
   return ledgerScore(a) >= ledgerScore(b) ? a : b;
 }
 
+function pagesDeclared(text: string) {
+  const seen = new Set<number>();
+  let total = 0;
+  for (const m of text.matchAll(/Page\s+(\d+)\s+of\s+(\d+)/gi)) {
+    seen.add(Number(m[1]));
+    total = Math.max(total, Number(m[2]));
+  }
+  return { seen, total };
+}
+
 export async function extractPdfText(
   data: ArrayBuffer,
   password?: string,
@@ -140,8 +150,11 @@ export async function extractPdfText(
   }
 
   if (looksLikeLedger(fallback) && !password) {
-    onProgress?.({ page: 1, pages: 1 });
-    return fallback;
+    const { seen, total } = pagesDeclared(fallback);
+    if (!total || seen.size >= total) {
+      onProgress?.({ page: Math.max(1, seen.size), pages: Math.max(1, total) });
+      return fallback;
+    }
   }
 
   let pdfjsText = "";

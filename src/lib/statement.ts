@@ -24,7 +24,7 @@ export type ParseResult = {
 };
 
 const SKIP_NOTE =
-  /\b(opening balance|closing balance|brought forward|carried forward|balance (brought|carried)|opening bal|closing bal|total balance|account balance|totals at end|totals at end of page|avail(?:able)? bal(?:ance)?|ledger bal(?:ance)?|balance brought forward|your available credit|payment dates displayed|closing date of this statement)\b/i;
+  /\b(opening balance|closing balance|brought forward|carried forward|balance (brought|carried)|opening bal|closing bal|total balance|account balance|totals at end|totals at end of page|avail(?:able)? bal(?:ance)?|ledger bal(?:ance)?|balance brought forward|your available credit|payment dates displayed|closing date of this statement|upcoming automatic|statement of accounts|today's statements)\b/i;
 
 const STATEMENT_CHROME =
   /^(totals|page\s+\d|go\s*-|date\b|transaction type|withdrawals|deposits|balance\b|ap automatic|bp bill|dc direct|dd direct|vt visa|ep eftpos|text$|your available|payment dates|account number|statement period|opening|closing|continued|contact us|anz bank|available credit|please note|important information)/i;
@@ -349,24 +349,94 @@ function inferYear(text: string) {
 }
 
 const ANZ_DATE = /^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i;
-const ANZ_CODE = /^(DD|DC|BP|AP|VT|EP|AT|CQ|ED|FX|IA|IP|IF|TP)\b/i;
+const ANZ_CODE = /^(DD|DC|BP|AP|VT|EP|AT|CQ|ED|FX|IA|IP|IF|TP|DR)\b/i;
+
+function compactAlpha(s: string) {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function isStatementJunk(line: string) {
+  const t = line.trim();
+  if (!t) return true;
+  if (SKIP_NOTE.test(t) || STATEMENT_CHROME.test(t)) return true;
+  const c = compactAlpha(t);
+  if (!c) return true;
+  if (
+    /openingbalance|closingbalance|broughtforward|carriedforward|totalsatend|availablecredit|paymentdatesdisplayed|closingdateofthisstatement|statementofaccounts|todaysstatements|upcomingautomatic|youraccountsataglance|anzbanknewzealand/.test(
+      c,
+    )
+  ) {
+    return true;
+  }
+  if (
+    !ANZ_DATE.test(t) &&
+    /automaticpayment|billpayment|directcredit|directdebit|visatransaction|eftpostransaction|electronicdishonour/.test(c)
+  ) {
+    return true;
+  }
+  if (/^page\d+of\d+$/.test(c)) return true;
+  if (/^text+$/.test(c)) return true;
+  return false;
+}
+
+function moneyOnLine(line: string) {
+  return [...line.matchAll(/\$?(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2}(?!\d)/g)].map((m) => m[0]);
+}
+
+function signedTailBalance(line: string, amounts: string[]) {
+  if (!amounts.length) return null;
+  const last = amounts[amounts.length - 1];
+  const n = parseAmount(last);
+  if (n == null) return null;
+  const idx = line.lastIndexOf(last);
+  const after = idx >= 0 ? line.slice(idx + last.length) : "";
+  if (/\bO\s*D\b/i.test(after)) return -Math.abs(n);
+  return n;
+}
+
+function cleanTxnNote(note: string) {
+  return note
+    .replace(/\b\d{4,8}\s*\*{2,}\s*\d{2,8}\b/g, " ")
+    .replace(/\bOrig(?:inal)?\s*date\s+\d{1,2}\/\d{1,2}\/\d{2,4}\b/gi, " ")
+    .replace(/\s+C$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 function parseAnzLedger(text: string, yearHint: number): Omit<StatementDraft, "key" | "duplicate" | "included">[] {
   const lines = text
     .split("\n")
     .map((l) => l.replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ").trim())
     .filter(Boolean);
-  const skipMerge = STATEMENT_CHROME;
   const merged: string[] = [];
+  let lastBal: number | null = null;
   for (const line of lines) {
-    if (ANZ_DATE.test(line) && !STATEMENT_CHROME.test(line) && !SKIP_NOTE.test(line)) merged.push(line);
-    else if (merged.length && !skipMerge.test(line) && !SKIP_NOTE.test(line) && !/available credit|closing date of this statement|page \d+ of \d+/i.test(line)) {
+    if (isStatementJunk(line)) {
+      const amounts = moneyOnLine(line);
+      const bal = signedTailBalance(line, amounts);
+      if (bal != null && /opening|broughtforward|brought forward/i.test(line + compactAlpha(line))) {
+        lastBal = bal;
+      }
+      continue;
+    }
+    if (ANZ_DATE.test(line) && !STATEMENT_CHROME.test(line)) merged.push(line);
+    else if (
+      merged.length &&
+      !/available credit|closing date of this statement|page \d+ of \d+/i.test(line) &&
+      !/^\d{2}-\d{4}-\d{7}/.test(line) &&
+      !/\b(weekly|fortnightly|monthly|frequency|upcoming)\b/i.test(line)
+    ) {
       merged[merged.length - 1] += ` ${line}`;
     }
   }
   const out: Omit<StatementDraft, "key" | "duplicate" | "included">[] = [];
   for (const line of merged) {
-    if (SKIP_NOTE.test(line) || /totals at end|available credit|page \d+ of \d+/i.test(line)) continue;
+    if (isStatementJunk(line) || /totals at end|available credit|page \d+ of \d+/i.test(line)) {
+      const amounts = moneyOnLine(line);
+      const bal = signedTailBalance(line, amounts);
+      if (bal != null) lastBal = bal;
+      continue;
+    }
     const dm = line.match(
       /^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[,\s]+(.*)$/i,
     );
@@ -381,24 +451,48 @@ function parseAnzLedger(text: string, yearHint: number): Omit<StatementDraft, "k
       .replace(/\bPage\s+\d+\s+of\s+\d+\b[\s\S]*$/i, "")
       .replace(/\bGo\s*-\s*continued\b/gi, "")
       .replace(/\bText(?:\s+text)+\b[\s\S]*$/i, "")
+      .replace(/\banz\.co\.nz\b[\s\S]*$/i, "")
+      .replace(/\bTo find out the date[\s\S]*$/i, "")
+      .replace(/\bday\s*prior\b[\s\S]*$/i, "")
+      .replace(/dayprior[\s\S]*$/i, "")
       .trim();
     const tm = rest.match(ANZ_CODE);
     const code = tm ? tm[1].toUpperCase() : "";
     if (tm) rest = rest.slice(tm[0].length).trim();
-    const moneyMatches = [...rest.matchAll(/\$?(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2}/g)].map((m) => m[0]);
+    const moneyMatches = moneyOnLine(rest);
     if (!moneyMatches.length) continue;
-    // ANZ Go: first money figure is the withdrawal/deposit; later figures are
-    // running balance (and sometimes footer totals if a page trailer leaked in).
     const amountStr = moneyMatches[0];
     const amount = parseAmount(amountStr);
     if (amount == null || amount === 0) continue;
+    const nextBal = moneyMatches.length >= 2 ? signedTailBalance(rest, moneyMatches) : null;
     let note = rest;
     for (const am of moneyMatches) note = note.split(am).join("");
-    note = [code, note.replace(/\s+/g, " ").trim()].filter(Boolean).join(" ");
+    note = [code, note.replace(/\s+/g, " ").replace(/\bO\s*D\b/gi, "").trim()].filter(Boolean).join(" ");
+    note = cleanTxnNote(note);
     if (SKIP_NOTE.test(note) || STATEMENT_CHROME.test(note) || /page \d+ of \d+/i.test(note)) continue;
     if (!code && note.length < 3) continue;
-    const type: TxType =
-      code === "DC" || /\b(wage\/salary|credit transfer|direct credit)\b/i.test(note) ? "income" : "expense";
+
+    let type: TxType = "expense";
+    if (lastBal != null && nextBal != null) {
+      const asIncome = Math.abs(nextBal - (lastBal + amount)) < 0.03;
+      const asExpense = Math.abs(nextBal - (lastBal - amount)) < 0.03;
+      if (asIncome && !asExpense) type = "income";
+      else if (asExpense && !asIncome) type = "expense";
+      else {
+        type =
+          code === "DC" || /\b(wage\/salary|credit transfer|direct credit|\bdeposit\b)\b/i.test(note)
+            ? "income"
+            : "expense";
+      }
+    } else {
+      type =
+        code === "DC" || /\b(wage\/salary|credit transfer|direct credit|\bdeposit\b)\b/i.test(note)
+          ? "income"
+          : "expense";
+    }
+    if (nextBal != null) lastBal = nextBal;
+    else if (lastBal != null) lastBal = type === "income" ? lastBal + amount : lastBal - amount;
+
     out.push({
       date,
       amount: Math.abs(amount),
@@ -438,7 +532,7 @@ function parseGenericLedger(text: string, yearHint: number): Omit<StatementDraft
       rest = (line.slice(0, mid.index) + " " + line.slice((mid.index ?? 0) + mid[1].length)).trim();
     } else continue;
     if (!date) continue;
-    const moneyMatches = [...rest.matchAll(/\$?(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2}(?:\s*(?:CR|DR))?/gi)].map((m) => m[0]);
+    const moneyMatches = [...rest.matchAll(/\$?(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2}(?!\d)(?:\s*(?:CR|DR))?/gi)].map((m) => m[0]);
     if (!moneyMatches.length) continue;
     const amountStr = moneyMatches.length >= 2 ? moneyMatches[moneyMatches.length - 2] : moneyMatches[0];
     const amount = parseAmount(amountStr.replace(/\s*(CR|DR)\s*$/i, ""));
@@ -446,6 +540,7 @@ function parseGenericLedger(text: string, yearHint: number): Omit<StatementDraft
     let note = rest;
     for (const am of moneyMatches) note = note.split(am).join("");
     note = note.replace(/\s+/g, " ").trim();
+    note = cleanTxnNote(note);
     if (SKIP_NOTE.test(note)) continue;
     const cr = /\bCR\b/i.test(amountStr);
     const dr = /\bDR\b/i.test(amountStr);

@@ -127,7 +127,7 @@ function inferType(q: string, note: string): TxType | undefined {
   if (/\b(income|earned|earning|inflow|deposit|refund|got paid|was paid|salary)\b/i.test(q)) return "income";
   if (/\b(expense|spent|paid|outflow|purchase|cost)\b/i.test(q)) return "expense";
   const tagged = classifyNote(note || q, "expense");
-  if (tagged.categoryId === "other-income" || tagged.categoryId === "salary" || tagged.categoryId === "freelance" || tagged.categoryId === "investments" || tagged.categoryId === "gifts") {
+  if (tagged.categoryId === "other-income" || tagged.categoryId === "salary" || tagged.categoryId === "freelance" || tagged.categoryId === "gig" || tagged.categoryId === "investments" || tagged.categoryId === "gifts") {
     return "income";
   }
   return undefined;
