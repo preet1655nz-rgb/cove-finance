@@ -6,6 +6,7 @@ import { QuickAdd } from "@/components/quick-add";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { StatementImport } from "@/components/statement-import";
 import { Button } from "@/components/ui/button";
+import { isSampleLedger, takeEmptyStart } from "@/lib/fresh-start";
 import { useFinanceStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -30,14 +31,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const setSettingsOpen = useFinanceStore((s) => s.setSettingsOpen);
 
   useEffect(() => {
-    try {
-      window.localStorage.removeItem("cove-finance-v1");
-    } catch {
-      /* private mode */
+    const store = useFinanceStore.getState();
+    const wiped = takeEmptyStart();
+    if (wiped || isSampleLedger(store.transactions)) {
+      store.clearAll();
+      useFinanceStore.persist.clearStorage();
+    }
+    if (wiped) {
+      try {
+        sessionStorage.setItem("cove-reloaded-empty", "1");
+      } catch {
+        /* private mode */
+      }
+      window.location.reload();
+      return;
     }
     const result = useFinanceStore.persist.rehydrate();
     void Promise.resolve(result).finally(() => {
-      useFinanceStore.getState().refreshNotices();
+      const s = useFinanceStore.getState();
+      if (isSampleLedger(s.transactions)) {
+        s.clearAll();
+        useFinanceStore.persist.clearStorage();
+      }
+      s.refreshNotices();
     });
   }, []);
 

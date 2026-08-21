@@ -62,7 +62,9 @@ function Dashboard() {
         <p className="text-[13px] text-muted-foreground">Balance</p>
         <p className="mt-2 font-display text-5xl tracking-tight tabular-nums sm:text-6xl">{money(balance, currency, true)}</p>
         <p className="mt-3 text-sm text-muted-foreground">
-          {signedMoney(net, currency)} {label.toLowerCase()}
+          {txs.length
+            ? `${signedMoney(net, currency)} ${label.toLowerCase()}`
+            : "No entries yet. Add one, or upload a statement."}
         </p>
         <div className="mt-8 grid grid-cols-3 gap-4 border-t border-border pt-6">
           <Stat label="In" value={money(income, currency, true)} tone="income" />

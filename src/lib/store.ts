@@ -5,6 +5,7 @@ import { buildNotices } from "./notify";
 import { spentInCategory } from "./period";
 import { buildSeed, defaultSettings } from "./seed";
 import { txFingerprint } from "./statement";
+import { isSampleLedger, LEDGER_KEY } from "./fresh-start";
 import type { Budget, Notice, RecurringBill, Settings, Transaction, TxType } from "./types";
 import { endOfMonth, startOfMonth, todayISO, uid } from "./utils";
 
@@ -306,8 +307,9 @@ export const useFinanceStore = create<FinanceState>()(
       },
     }),
     {
-      name: "cove-finance-v2",
+      name: LEDGER_KEY,
       skipHydration: true,
+      version: 3,
       partialize: (s) => ({
         transactions: s.transactions,
         budgets: s.budgets,
@@ -315,6 +317,14 @@ export const useFinanceStore = create<FinanceState>()(
         notices: s.notices,
         settings: s.settings,
       }),
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<FinanceState>;
+        if (isSampleLedger(p.transactions)) return current;
+        return { ...current, ...p };
+      },
+      onRehydrateStorage: () => (state) => {
+        if (state && isSampleLedger(state.transactions)) state.clearAll();
+      },
     },
   ),
 );
@@ -324,3 +334,4 @@ export function monthSpent(categoryId: string) {
   const today = todayISO();
   return spentInCategory(txs, categoryId, startOfMonth(today), endOfMonth(today));
 }
+
