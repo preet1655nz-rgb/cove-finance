@@ -1,12 +1,14 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { getCategory } from "./categories";
+import { interpretChat } from "./chat-brain";
+import { applyRulesToTxs, classifyNote, pairTransfers } from "./intelligence";
 import { buildNotices } from "./notify";
 import { spentInCategory } from "./period";
 import { buildSeed, defaultSettings } from "./seed";
 import { txFingerprint } from "./statement";
 import { isSampleLedger, LEDGER_KEY } from "./fresh-start";
-import type { Budget, Notice, RecurringBill, Settings, Transaction, TxType } from "./types";
+import type { BankAccount, Budget, ChatMessage, MemoryRule, Notice, RecurringBill, Settings, Transaction, TxType } from "./types";
 import { endOfMonth, startOfMonth, todayISO, uid } from "./utils";
 
 type Draft = {
@@ -23,6 +25,7 @@ export type ImportRow = {
   type: TxType;
   note: string;
   categoryId: string;
+  accountId?: string;
 };
 
 type FinanceState = {
@@ -30,6 +33,11 @@ type FinanceState = {
   budgets: Budget[];
   bills: RecurringBill[];
   notices: Notice[];
+  accounts: BankAccount[];
+  rules: MemoryRule[];
+  chat: ChatMessage[];
+  chatOpen: boolean;
+  importAccountId: string | null;
   settings: Settings;
   period: "this-month" | "last-month" | "quarter" | "year" | "all";
   addOpen: boolean;
@@ -61,7 +69,12 @@ type FinanceState = {
   resetSample: () => void;
   clearAll: () => void;
   importData: (raw: unknown) => boolean;
-  importTransactions: (rows: ImportRow[]) => { added: number; skipped: number };
+  importTransactions: (rows: ImportRow[], accountId?: string) => { added: number; skipped: number };
+  upsertAccount: (account: Omit<BankAccount, "id"> & { id?: string }) => string;
+  removeAccount: (id: string) => void;
+  setImportAccountId: (id: string | null) => void;
+  setChatOpen: (open: boolean) => void;
+  askCove: (text: string) => string;
 };
 
 const emptyDraft = (): Draft => ({
@@ -86,6 +99,11 @@ export const useFinanceStore = create<FinanceState>()(
       budgets: [],
       bills: [],
       notices: [],
+      accounts: [],
+      rules: [],
+      chat: [],
+      chatOpen: false,
+      importAccountId: null,
       settings: defaultSettings,
       period: "this-month",
       addOpen: false,
@@ -262,7 +280,7 @@ export const useFinanceStore = create<FinanceState>()(
         );
         return true;
       },
-      importTransactions: (incoming) => {
+      importTransactions: (incoming, accountId) => {
         const existing = get().transactions;
         const seen = new Set(existing.map((t) => txFingerprint(t.date, t.amount, t.note)));
         const added: Transaction[] = [];
@@ -279,23 +297,28 @@ export const useFinanceStore = create<FinanceState>()(
             continue;
           }
           seen.add(fp);
-          const type = getCategory(row.categoryId).type;
+          const type = row.type || getCategory(row.categoryId).type;
+          const tagged = classifyNote(note, type, get().rules);
           added.push({
             id: uid(),
             type,
             amount: Math.round(row.amount * 100) / 100,
-            categoryId: row.categoryId,
+            categoryId: tagged.categoryId,
             note,
             date: row.date,
             createdAt: new Date().toISOString(),
+            accountId: row.accountId ?? accountId,
+            counterparty: tagged.counterparty,
+            transfer: tagged.transfer,
           });
         }
         if (added.length) {
           const latest = added.reduce((m, t) => (t.date > m ? t.date : m), added[0].date);
+          const merged = pairTransfers(applyRulesToTxs([...added, ...existing], get().rules), get().accounts);
           set(
             withNotices({
               ...get(),
-              transactions: [...added, ...existing],
+              transactions: merged,
               importOpen: false,
               focusMonth: latest.slice(0, 7),
             }),
@@ -305,17 +328,53 @@ export const useFinanceStore = create<FinanceState>()(
         }
         return { added: added.length, skipped };
       },
+      upsertAccount: (account) => {
+        const id = account.id || uid();
+        const accounts = get().accounts.some((a) => a.id === id)
+          ? get().accounts.map((a) => (a.id === id ? { ...a, ...account, id } : a))
+          : [...get().accounts, { ...account, id, bank: account.bank || "other", name: account.name || "Account" }];
+        set({ accounts });
+        return id;
+      },
+      removeAccount: (id) => set({ accounts: get().accounts.filter((a) => a.id !== id) }),
+      setImportAccountId: (importAccountId) => set({ importAccountId }),
+      setChatOpen: (chatOpen) => set({ chatOpen }),
+      askCove: (text) => {
+        const trimmed = text.trim();
+        if (!trimmed) return "";
+        const user: ChatMessage = { id: uid(), role: "user", text: trimmed, at: new Date().toISOString() };
+        const effect = interpretChat(trimmed, {
+          transactions: get().transactions,
+          accounts: get().accounts,
+          rules: get().rules,
+          currency: get().settings.currency,
+        });
+        const cove: ChatMessage = { id: uid(), role: "cove", text: effect.reply, at: new Date().toISOString() };
+        const chat = [...get().chat, user, cove].slice(-60);
+        const patch: Partial<FinanceState> = { chat };
+        if (effect.rules) patch.rules = effect.rules;
+        if (effect.accounts) patch.accounts = effect.accounts;
+        if (effect.transactions) {
+          set(withNotices({ ...get(), ...patch, transactions: effect.transactions, notices: get().notices }));
+        } else {
+          set(patch);
+        }
+        return effect.reply;
+      },
     }),
     {
       name: LEDGER_KEY,
       skipHydration: true,
-      version: 3,
+      version: 4,
       partialize: (s) => ({
         transactions: s.transactions,
         budgets: s.budgets,
         bills: s.bills,
         notices: s.notices,
         settings: s.settings,
+        accounts: s.accounts,
+        rules: s.rules,
+        chat: s.chat,
       }),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<FinanceState>;

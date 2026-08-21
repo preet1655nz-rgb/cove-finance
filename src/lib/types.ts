@@ -1,5 +1,12 @@
 export type TxType = "income" | "expense";
 
+export type TransferLeg = {
+  direction: "in" | "out";
+  otherAccountId?: string;
+  otherLabel: string;
+  pairId?: string;
+};
+
 export type Transaction = {
   id: string;
   type: TxType;
@@ -8,6 +15,31 @@ export type Transaction = {
   note: string;
   date: string;
   createdAt: string;
+  accountId?: string;
+  counterparty?: string;
+  transfer?: TransferLeg;
+};
+
+export type BankAccount = {
+  id: string;
+  name: string;
+  bank: string;
+  numberHint?: string;
+};
+
+export type MemoryRule = {
+  id: string;
+  pattern: string;
+  kind: "category" | "transfer";
+  categoryId?: string;
+  accountName?: string;
+};
+
+export type ChatMessage = {
+  id: string;
+  role: "user" | "cove";
+  text: string;
+  at: string;
 };
 
 export type Budget = {

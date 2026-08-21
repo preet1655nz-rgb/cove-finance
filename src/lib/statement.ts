@@ -1,5 +1,6 @@
 import { CATEGORIES, getCategory } from "./categories";
-import type { Transaction, TxType } from "./types";
+import { classifyNote } from "./intelligence";
+import type { MemoryRule, Transaction, TxType } from "./types";
 
 export type StatementDraft = {
   key: string;
@@ -35,28 +36,6 @@ const IGNORE_H =
 const INCOME_TYPE = /\b(credit|deposit|salary|salaire|payroll|interest|dividend|refund|direct credit|d\/c|\bdc\b|dep|inward|payment received|cr|wage\/salary|credit transfer)\b/i;
 const EXPENSE_TYPE = /\b(debit|pos|eftpos|visa|mastercard|atm|payment|bill|direct debit|d\/d|\bdd\b|withdrawal|fee|purchase|dr|outward|transfer out|\bbp\b|\bap\b|\bvt\b|\bep\b|\bat\b|bill payment|automatic payment)\b/i;
 
-
-const RULES: { re: RegExp; id: string }[] = [
-  { re: /\b(salary|salaire|wages?|payroll|paye|direct dep(osit)?|employer)\b/i, id: "salary" },
-  { re: /\b(freelance|invoice|contract work|consult)\b/i, id: "freelance" },
-  { re: /\b(dividend|interest|vti|hatch|investnow|brokerage)\b/i, id: "investments" },
-  { re: /\b(didi mobility|uber bv)\b/i, id: "other-income" },
-  { re: /\b(gift|birthday|present from)\b/i, id: "gifts" },
-  { re: /\b(ird|inland revenue|tax refund|gst return)\b/i, id: "other-income" },
-  { re: /\b(rent|landlord|barfoot|harcourts|mortgage)\b/i, id: "housing" },
-  { re: /\b(countdown|new world|pak'? ?n ?save|paknsave|farro|woolworths|fresh choice|four square|coles|aldi|tesco|whole foods|trader joe|grocery|fruit shop|vege|foodmart)\b/i, id: "groceries" },
-  { re: /\b(uber eats|deliveroo|menulog|doordash|mcdonald|kfc|subway|dominos|pizza|burger|restaurant|bistro|kitchen|takeaway|amano|coco'?s|orphans|sweets)\b/i, id: "dining" },
-  { re: /\b(allpress|starbucks|coffee|caf[eé]|espresso|l'?affare|gloria jean)\b/i, id: "drinks" },
-  { re: /\b(netflix|spotify|icloud|disney|youtube|apple\.com\/bill|google one|dropbox|subscription)\b/i, id: "subscriptions" },
-  { re: /\b(waitomo|bp |z energy|mobil|shell|petrol|gasoline|at hop|auckland transport|uber trip|uber *rides|lyft|parking|wilson parking|transit)\b/i, id: "transport" },
-  { re: /\b(genesis|mercury|contact energy|meridian|powershop|vector|watercare|spark|one nz|2degrees|vodafone|chorus|fibre|broadband|internet|power|electri)\b/i, id: "utilities" },
-  { re: /\b(pharmacy|chemist|physio|doctor| gp\b|hospital|dental|dentist|acc |cityfitness|city fitness)\b/i, id: "health" },
-  { re: /\b(airbnb|booking\.com|air new zealand|air nz|jetstar|qantas|hotel|motel|flight)\b/i, id: "travel" },
-  { re: /\b(uniqlo|zara|h&m|kmart|the warehouse|amazon|cotton on|country road)\b/i, id: "shopping" },
-  { re: /\b(cinema|event cinemas|ticketmaster|concert|academy cinema|aotea)\b/i, id: "entertainment" },
-  { re: /\b(university|course|udemy|workbook|tuition)\b/i, id: "education" },
-  { re: /\b(kiwisaver|emergency fund|savings|sharesies|wstpac saving)\b/i, id: "savings" },
-];
 
 export const SAMPLE_STATEMENT = `Type,Details,Particulars,Code,Reference,Amount,Date,Processed Date
 Direct credit,ACME DESIGN LTD,SALARY,,,6200.00,14/08/2026,14/08/2026
@@ -932,20 +911,8 @@ function iso(y: string | number, m: string | number, d: string | number) {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-export function categorize(note: string, type: TxType): string {
-  for (const rule of RULES) {
-    if (rule.re.test(note)) {
-      const cat = getCategory(rule.id);
-      if (cat.type === type) return rule.id;
-      return type === "income" ? incomeFallback(rule.id) : "other";
-    }
-  }
-  return type === "income" ? "other-income" : "other";
-}
-
-function incomeFallback(id: string) {
-  if (id === "salary" || id === "freelance" || id === "investments" || id === "gifts" || id === "other-income") return id;
-  return "other-income";
+export function categorize(note: string, type: TxType, rules: MemoryRule[] = []): string {
+  return classifyNote(note, type, rules).categoryId;
 }
 
 export function categoriesForSelect(type: TxType) {

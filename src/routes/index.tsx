@@ -7,7 +7,8 @@ import { TransactionRow } from "@/components/transaction-row";
 import { Progress } from "@/components/ui/progress";
 import { getCategory } from "@/lib/categories";
 import { money, pct, signedMoney } from "@/lib/format";
-import { inPeriod, netOf, periodRange, spentInCategory, sumBy } from "@/lib/period";
+import { livingTxs } from "@/lib/intelligence";
+import { inPeriod, netOf, periodRange, spentInCategory } from "@/lib/period";
 import { useFinanceStore } from "@/lib/store";
 import { endOfMonth, startOfMonth, todayISO } from "@/lib/utils";
 
@@ -29,8 +30,9 @@ function Dashboard() {
   const name = useFinanceStore((s) => s.settings.displayName);
   const currency = useFinanceStore((s) => s.settings.currency);
   const slice = txs.filter((t) => inPeriod(t, period));
-  const income = sumBy(txs, "income", period);
-  const expense = sumBy(txs, "expense", period);
+  const lived = livingTxs(slice);
+  const income = lived.filter((t) => t.type === "income").reduce((s, x) => s + x.amount, 0);
+  const expense = lived.filter((t) => t.type === "expense").reduce((s, x) => s + x.amount, 0);
   const net = income - expense;
   const balance = netOf(txs);
   const { label } = periodRange(period);

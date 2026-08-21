@@ -19,6 +19,7 @@ import {
   readStatementFile,
   type StatementDraft,
 } from "@/lib/statement";
+import { classifyNote, inferAccountMeta } from "@/lib/intelligence";
 import { useFinanceStore } from "@/lib/store";
 import type { TxType } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,8 @@ export function StatementImport() {
   const open = useFinanceStore((s) => s.importOpen);
   const setOpen = useFinanceStore((s) => s.setImportOpen);
   const importTransactions = useFinanceStore((s) => s.importTransactions);
+  const accounts = useFinanceStore((s) => s.accounts);
+  const upsertAccount = useFinanceStore((s) => s.upsertAccount);
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -38,6 +41,8 @@ export function StatementImport() {
   const [heldFile, setHeldFile] = useState<File | null>(null);
   const [password, setPassword] = useState("");
   const [needsPassword, setNeedsPassword] = useState(false);
+  const [accountId, setAccountId] = useState("");
+  const [newAccount, setNewAccount] = useState("");
 
   function reset() {
     setRows([]);
@@ -48,6 +53,8 @@ export function StatementImport() {
     setHeldFile(null);
     setPassword("");
     setNeedsPassword(false);
+    setAccountId("");
+    setNewAccount("");
   }
 
   function applyParse(result: ReturnType<typeof parseBankStatement>) {
@@ -63,7 +70,15 @@ export function StatementImport() {
     setNeedsPassword(false);
     setWarnings(result.warnings);
     setSkipped(result.skipped);
-    setRows(applyDuplicates(result.rows, useFinanceStore.getState().transactions));
+    const tagged = result.rows.map((r) => {
+      const hit = classifyNote(r.note, r.type, useFinanceStore.getState().rules);
+      return { ...r, categoryId: hit.categoryId };
+    });
+    setRows(applyDuplicates(tagged, useFinanceStore.getState().transactions));
+    const inferred = inferAccountMeta(result.format, result.format, result.rows.map((r) => r.note));
+    const existing = useFinanceStore.getState().accounts.find((a) => a.bank === inferred.bank);
+    if (existing) setAccountId(existing.id);
+    else setNewAccount(inferred.name);
   }
 
   async function onFile(file: File | undefined, pwd?: string) {
@@ -140,6 +155,11 @@ export function StatementImport() {
   const dupN = rows.filter((r) => r.duplicate).length;
 
   function confirm() {
+    let aid = accountId;
+    if (!aid) {
+      const name = newAccount.trim() || "Everyday";
+      aid = upsertAccount({ name, bank: inferAccountMeta(name, name, included.map((r) => r.note)).bank });
+    }
     const result = importTransactions(
       included.map((r) => ({
         date: r.date,
@@ -147,7 +167,9 @@ export function StatementImport() {
         type: r.type,
         note: r.note,
         categoryId: r.categoryId,
+        accountId: aid,
       })),
+      aid,
     );
     if (result.added) toast.success(`Imported ${result.added} ${result.added === 1 ? "entry" : "entries"}`);
     else toast.error("Nothing new to import");
@@ -250,6 +272,29 @@ export function StatementImport() {
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <label className="text-[12px] text-muted-foreground sm:w-28">Link to account</label>
+              <select
+                value={accountId}
+                onChange={(e) => setAccountId(e.target.value)}
+                className="h-11 flex-1 rounded-md bg-card px-3 text-sm shadow-card"
+              >
+                <option value="">New account</option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+              {!accountId ? (
+                <input
+                  value={newAccount}
+                  onChange={(e) => setNewAccount(e.target.value)}
+                  placeholder="e.g. ANZ Go"
+                  className="h-11 flex-1 rounded-md bg-card px-3 text-sm shadow-card"
+                />
+              ) : null}
+            </div>
             <p className="text-sm text-muted-foreground">
               {included.length} to import · {incomeN} in · {expenseN} out
               {dupN ? ` · ${dupN} already in Cove` : ""}
