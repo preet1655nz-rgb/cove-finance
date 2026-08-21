@@ -50,9 +50,9 @@ export function CoveChat() {
         <div className="fixed inset-x-3 bottom-20 z-50 flex max-h-[min(72dvh,580px)] flex-col overflow-hidden rounded-xl bg-card shadow-card lg:inset-x-auto lg:right-6 lg:bottom-24 lg:w-[400px]">
           <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
             <div>
-              <p className="text-sm font-medium">Cove · expert</p>
+              <p className="text-sm font-medium">Ask Cove</p>
               <p className="text-[12px] text-muted-foreground">
-                Reads your books · NZ tax & KiwiSaver
+                Runs in this app · your ledger · NZ tax
                 {rules.length ? ` · ${rules.length} rules` : ""}
                 {accounts.length ? ` · ${accounts.length} accounts` : ""}
               </p>
@@ -64,8 +64,8 @@ export function CoveChat() {
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
             {chat.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Ask a real question and I’ll answer from your ledger. Tell me to retag payees, set a budget, or log an
-                amount — I change Cove without touching anything you didn’t ask for.
+                Built into Cove and shipped on GitHub / Vercel — no outside chat service. Ask about your books, NZ tax,
+                or tell me to change a budget, payee, or entry.
               </p>
             ) : (
               chat.map((m) => (

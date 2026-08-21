@@ -10,7 +10,7 @@ import {
   resolveCategoryAlias,
   transferFlows,
 } from "./intelligence";
-import { answerFromSnapshot, buildSnapshot } from "./cove-expert";
+import { answerFromSnapshot, buildSnapshot, formatSnapshotBrief } from "./cove-expert";
 import { explainTax, parseMoneyish } from "./nz-finance";
 import type { BankAccount, Budget, CoveFact, MemoryRule, RecurringBill, Settings, Transaction } from "./types";
 import { todayISO, uid } from "./utils";
@@ -285,8 +285,7 @@ export function interpretChat(input: string, ctx: BrainContext): BrainEffect {
     };
   }
 
-  const known = CATEGORIES.map((c) => c.name.toLowerCase());
   return {
-    reply: `I can change budgets, retag payees, log entries, and answer from your actual ledger plus NZ tax/KiwiSaver rules. Try “how am I doing?”. Categories I know: ${known.slice(0, 8).join(", ")}…`,
+    reply: `Here’s what I can see in your books right now:\n${formatSnapshotBrief(snap)}\n\nI run inside Cove, not an outside model. Ask “how am I doing?”, “tax on 90000”, set a budget, or teach me a payee.`,
   };
 }

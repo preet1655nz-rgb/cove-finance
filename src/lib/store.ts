@@ -2,7 +2,6 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { getCategory } from "./categories";
 import { interpretChat } from "./chat-brain";
-import { applyCoveActions, buildSnapshot } from "./cove-expert";
 import { applyRulesToTxs, classifyNote, pairTransfers } from "./intelligence";
 import { buildNotices } from "./notify";
 import { spentInCategory } from "./period";
@@ -349,6 +348,7 @@ export const useFinanceStore = create<FinanceState>()(
         if (!trimmed) return "";
         const user: ChatMessage = { id: uid(), role: "user", text: trimmed, at: new Date().toISOString() };
         set({ chat: [...get().chat, user].slice(-60), chatBusy: true, chatOpen: true });
+        await new Promise((r) => setTimeout(r, 40));
         const s = get();
         const ledger = {
           transactions: s.transactions,
@@ -361,39 +361,13 @@ export const useFinanceStore = create<FinanceState>()(
         };
         const compact = (next: Partial<FinanceState>) =>
           Object.fromEntries(Object.entries(next).filter(([, v]) => v !== undefined)) as Partial<FinanceState>;
-        const finish = (reply: string, next: Partial<FinanceState> = {}) => {
-          const cove: ChatMessage = { id: uid(), role: "cove", text: reply, at: new Date().toISOString() };
-          const chat = [...get().chat, cove].slice(-60);
-          const patch = compact(next);
-          if (patch.transactions || patch.budgets || patch.bills) {
-            set(withNotices({ ...get(), ...patch, chat, chatBusy: false, notices: get().notices }));
-          } else {
-            set({ ...patch, chat, chatBusy: false });
-          }
-          return reply;
-        };
-        try {
-          const { askCoveExpert } = await import("./cove-ai");
-          const grok = await askCoveExpert({
-            data: {
-              message: trimmed,
-              history: get().chat.slice(-8).map((m) => ({ role: m.role, text: m.text })),
-              snapshot: buildSnapshot(ledger),
-            },
-          });
-          if (grok && "ok" in grok && grok.ok) {
-            const applied = applyCoveActions(ledger, grok.actions);
-            const extra = applied.notes.length ? `\n\n${applied.notes.join(" · ")}` : "";
-            return finish(grok.reply + extra, applied.next);
-          }
-        } catch (err) {
-          console.error(err);
-        }
         const effect = interpretChat(trimmed, {
           ...ledger,
           currency: s.settings.currency,
         });
-        return finish(effect.reply, {
+        const cove: ChatMessage = { id: uid(), role: "cove", text: effect.reply, at: new Date().toISOString() };
+        const chat = [...get().chat, cove].slice(-60);
+        const patch = compact({
           rules: effect.rules,
           accounts: effect.accounts,
           transactions: effect.transactions,
@@ -402,6 +376,12 @@ export const useFinanceStore = create<FinanceState>()(
           facts: effect.facts,
           settings: effect.settings,
         });
+        if (patch.transactions || patch.budgets || patch.bills) {
+          set(withNotices({ ...get(), ...patch, chat, chatBusy: false, notices: get().notices }));
+        } else {
+          set({ ...patch, chat, chatBusy: false });
+        }
+        return effect.reply;
       },
     }),
     {
