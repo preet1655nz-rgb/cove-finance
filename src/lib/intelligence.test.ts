@@ -58,6 +58,10 @@ test("chat rule retags sharesies and transfer pairing", () => {
       { id: b, name: "Everyday B", bank: "westpac" },
     ],
     rules: [],
+    budgets: [],
+    bills: [],
+    facts: [],
+    settings: { displayName: "", currency: "NZD", browserNotifications: false, budgetAlertPct: 80 },
     currency: "NZD",
   });
   assert.match(effect.reply, /transfer/i);

@@ -42,6 +42,11 @@ export type ChatMessage = {
   at: string;
 };
 
+export type CoveFact = {
+  id: string;
+  text: string;
+};
+
 export type Budget = {
   id: string;
   categoryId: string;

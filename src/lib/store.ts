@@ -2,13 +2,14 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { getCategory } from "./categories";
 import { interpretChat } from "./chat-brain";
+import { applyCoveActions, buildSnapshot } from "./cove-expert";
 import { applyRulesToTxs, classifyNote, pairTransfers } from "./intelligence";
 import { buildNotices } from "./notify";
 import { spentInCategory } from "./period";
 import { buildSeed, defaultSettings } from "./seed";
 import { txFingerprint } from "./statement";
 import { isSampleLedger, LEDGER_KEY } from "./fresh-start";
-import type { BankAccount, Budget, ChatMessage, MemoryRule, Notice, RecurringBill, Settings, Transaction, TxType } from "./types";
+import type { BankAccount, Budget, ChatMessage, CoveFact, MemoryRule, Notice, RecurringBill, Settings, Transaction, TxType } from "./types";
 import { endOfMonth, startOfMonth, todayISO, uid } from "./utils";
 
 type Draft = {
@@ -35,8 +36,10 @@ type FinanceState = {
   notices: Notice[];
   accounts: BankAccount[];
   rules: MemoryRule[];
+  facts: CoveFact[];
   chat: ChatMessage[];
   chatOpen: boolean;
+  chatBusy: boolean;
   importAccountId: string | null;
   settings: Settings;
   period: "this-month" | "last-month" | "quarter" | "year" | "all";
@@ -74,7 +77,7 @@ type FinanceState = {
   removeAccount: (id: string) => void;
   setImportAccountId: (id: string | null) => void;
   setChatOpen: (open: boolean) => void;
-  askCove: (text: string) => string;
+  askCove: (text: string) => Promise<string>;
 };
 
 const emptyDraft = (): Draft => ({
@@ -101,8 +104,10 @@ export const useFinanceStore = create<FinanceState>()(
       notices: [],
       accounts: [],
       rules: [],
+      facts: [],
       chat: [],
       chatOpen: false,
+      chatBusy: false,
       importAccountId: null,
       settings: defaultSettings,
       period: "this-month",
@@ -339,33 +344,70 @@ export const useFinanceStore = create<FinanceState>()(
       removeAccount: (id) => set({ accounts: get().accounts.filter((a) => a.id !== id) }),
       setImportAccountId: (importAccountId) => set({ importAccountId }),
       setChatOpen: (chatOpen) => set({ chatOpen }),
-      askCove: (text) => {
+      askCove: async (text) => {
         const trimmed = text.trim();
         if (!trimmed) return "";
         const user: ChatMessage = { id: uid(), role: "user", text: trimmed, at: new Date().toISOString() };
-        const effect = interpretChat(trimmed, {
-          transactions: get().transactions,
-          accounts: get().accounts,
-          rules: get().rules,
-          currency: get().settings.currency,
-        });
-        const cove: ChatMessage = { id: uid(), role: "cove", text: effect.reply, at: new Date().toISOString() };
-        const chat = [...get().chat, user, cove].slice(-60);
-        const patch: Partial<FinanceState> = { chat };
-        if (effect.rules) patch.rules = effect.rules;
-        if (effect.accounts) patch.accounts = effect.accounts;
-        if (effect.transactions) {
-          set(withNotices({ ...get(), ...patch, transactions: effect.transactions, notices: get().notices }));
-        } else {
-          set(patch);
+        set({ chat: [...get().chat, user].slice(-60), chatBusy: true, chatOpen: true });
+        const s = get();
+        const ledger = {
+          transactions: s.transactions,
+          accounts: s.accounts,
+          rules: s.rules,
+          budgets: s.budgets,
+          bills: s.bills,
+          facts: s.facts,
+          settings: s.settings,
+        };
+        const compact = (next: Partial<FinanceState>) =>
+          Object.fromEntries(Object.entries(next).filter(([, v]) => v !== undefined)) as Partial<FinanceState>;
+        const finish = (reply: string, next: Partial<FinanceState> = {}) => {
+          const cove: ChatMessage = { id: uid(), role: "cove", text: reply, at: new Date().toISOString() };
+          const chat = [...get().chat, cove].slice(-60);
+          const patch = compact(next);
+          if (patch.transactions || patch.budgets || patch.bills) {
+            set(withNotices({ ...get(), ...patch, chat, chatBusy: false, notices: get().notices }));
+          } else {
+            set({ ...patch, chat, chatBusy: false });
+          }
+          return reply;
+        };
+        try {
+          const { askCoveExpert } = await import("./cove-ai");
+          const grok = await askCoveExpert({
+            data: {
+              message: trimmed,
+              history: get().chat.slice(-8).map((m) => ({ role: m.role, text: m.text })),
+              snapshot: buildSnapshot(ledger),
+            },
+          });
+          if (grok && "ok" in grok && grok.ok) {
+            const applied = applyCoveActions(ledger, grok.actions);
+            const extra = applied.notes.length ? `\n\n${applied.notes.join(" · ")}` : "";
+            return finish(grok.reply + extra, applied.next);
+          }
+        } catch (err) {
+          console.error(err);
         }
-        return effect.reply;
+        const effect = interpretChat(trimmed, {
+          ...ledger,
+          currency: s.settings.currency,
+        });
+        return finish(effect.reply, {
+          rules: effect.rules,
+          accounts: effect.accounts,
+          transactions: effect.transactions,
+          budgets: effect.budgets,
+          bills: effect.bills,
+          facts: effect.facts,
+          settings: effect.settings,
+        });
       },
     }),
     {
       name: LEDGER_KEY,
       skipHydration: true,
-      version: 4,
+      version: 5,
       partialize: (s) => ({
         transactions: s.transactions,
         budgets: s.budgets,
@@ -374,6 +416,7 @@ export const useFinanceStore = create<FinanceState>()(
         settings: s.settings,
         accounts: s.accounts,
         rules: s.rules,
+        facts: s.facts,
         chat: s.chat,
       }),
       merge: (persisted, current) => {

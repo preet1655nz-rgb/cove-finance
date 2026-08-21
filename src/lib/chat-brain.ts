@@ -10,13 +10,19 @@ import {
   resolveCategoryAlias,
   transferFlows,
 } from "./intelligence";
-import type { BankAccount, MemoryRule, Transaction } from "./types";
-import { uid } from "./utils";
+import { answerFromSnapshot, buildSnapshot } from "./cove-expert";
+import { explainTax, parseMoneyish } from "./nz-finance";
+import type { BankAccount, Budget, CoveFact, MemoryRule, RecurringBill, Settings, Transaction } from "./types";
+import { todayISO, uid } from "./utils";
 
 export type BrainContext = {
   transactions: Transaction[];
   accounts: BankAccount[];
   rules: MemoryRule[];
+  budgets: Budget[];
+  bills: RecurringBill[];
+  facts: CoveFact[];
+  settings: Settings;
   currency: string;
 };
 
@@ -25,6 +31,10 @@ export type BrainEffect = {
   rules?: MemoryRule[];
   accounts?: BankAccount[];
   transactions?: Transaction[];
+  budgets?: Budget[];
+  bills?: RecurringBill[];
+  facts?: CoveFact[];
+  settings?: Settings;
 };
 
 function sum(txs: Transaction[]) {
@@ -43,23 +53,98 @@ function fmt(amount: number, currency: string) {
 export function interpretChat(input: string, ctx: BrainContext): BrainEffect {
   const text = input.trim();
   const q = text.toLowerCase().replace(/[’']/g, "'");
-  const currency = ctx.currency || "NZD";
+  const currency = ctx.currency || ctx.settings?.currency || "NZD";
+  ctx = {
+    ...ctx,
+    budgets: ctx.budgets ?? [],
+    bills: ctx.bills ?? [],
+    facts: ctx.facts ?? [],
+    rules: ctx.rules ?? [],
+    accounts: ctx.accounts ?? [],
+    transactions: ctx.transactions ?? [],
+  };
+  const snap = buildSnapshot({
+    transactions: ctx.transactions,
+    accounts: ctx.accounts,
+    rules: ctx.rules,
+    budgets: ctx.budgets ?? [],
+    bills: ctx.bills ?? [],
+    facts: ctx.facts ?? [],
+    settings: ctx.settings ?? { displayName: "", currency, browserNotifications: false, budgetAlertPct: 80 },
+  });
 
   if (!q || /^(help|what can you do|\?)$/i.test(q)) {
     return {
       reply:
-        "Tell me how to classify things, and I remember. Try “Sharesies is investing”, “guri wstpac saving is a transfer to Westpac savings”, “how much to Westpac”, or “what is in Other”.",
+        "Ask anything about your books, NZ tax, KiwiSaver, or tell me to change Cove. Try “How am I doing?”, “Tax on 90000”, “Set groceries budget to 400”, or “Sharesies is investing”.",
     };
   }
 
   if (/^(hi|hello|hey)\b/.test(q)) {
-    return { reply: "I’m Cove. I remember your accounts and rules. What should I learn?" };
+    return { reply: "Cove here — I can see your ledger and NZ money rules. What do you want to know or change?" };
+  }
+
+  const grounded = answerFromSnapshot(text, snap);
+  if (grounded) return { reply: grounded };
+
+  const taxBare = q.match(/^(?:what(?:'s| is)|calculate|estimate)?\s*(?:the )?nzd? (?:income )?tax (?:on |for )\$?([\d,]+)/i)
+    || q.match(/tax on (?:\$)?([\d,]+)/i);
+  if (taxBare) {
+    const gross = parseMoneyish(taxBare[1]);
+    if (gross && gross >= 1000) return { reply: explainTax(gross) };
+  }
+
+  const budgetSet = q.match(/^(?:set|make|change|update)\s+(?:my\s+)?(.+?)\s+budget\s+(?:to\s+)?\$?([\d,]+(?:\.\d{1,2})?)/i)
+    || q.match(/^budget\s+(.+?)\s+(?:at|to|=)\s+\$?([\d,]+(?:\.\d{1,2})?)/i);
+  if (budgetSet) {
+    const categoryId = resolveCategoryAlias(budgetSet[1]);
+    const amount = parseMoneyish(budgetSet[2]);
+    if (categoryId && amount) {
+      const budgets = ctx.budgets.some((b) => b.categoryId === categoryId)
+        ? ctx.budgets.map((b) => (b.categoryId === categoryId ? { ...b, amount } : b))
+        : [...ctx.budgets, { id: uid(), categoryId, amount }];
+      return { reply: `${getCategory(categoryId).name} budget is now ${fmt(amount, currency)}.`, budgets };
+    }
+  }
+
+  const addTx = q.match(/^(?:add|log|record)\s+\$?([\d,]+(?:\.\d{1,2})?)\s+(?:for\s+)?(.+)$/i);
+  if (addTx) {
+    const amount = parseMoneyish(addTx[1]);
+    const note = addTx[2].replace(/\btoday\b/i, "").trim();
+    if (amount && note) {
+      const tagged = classifyNote(note, "expense", ctx.rules);
+      const row: Transaction = {
+        id: uid(),
+        type: tagged.categoryId.startsWith("transfer") && /refund|salary|invoice/.test(note) ? "income" : getCategory(tagged.categoryId).type,
+        amount,
+        categoryId: tagged.categoryId,
+        note,
+        date: todayISO(),
+        createdAt: new Date().toISOString(),
+        counterparty: tagged.counterparty,
+        transfer: tagged.transfer,
+      };
+      if (/salary|invoice|refund/.test(note) && row.type === "expense") {
+        row.type = "income";
+        row.categoryId = classifyNote(note, "income", ctx.rules).categoryId;
+      }
+      return {
+        reply: `Logged ${fmt(amount, currency)} as ${getCategory(row.categoryId).name} (${note}).`,
+        transactions: [row, ...ctx.transactions],
+      };
+    }
+  }
+
+  const remember = q.match(/^(?:remember|note that|save that)\s+(.+)/i);
+  if (remember) {
+    const fact = remember[1].trim();
+    const facts = [...(ctx.facts ?? []).filter((f) => f.text.toLowerCase() !== fact.toLowerCase()), { id: uid(), text: fact }].slice(-40);
+    return { reply: `I’ll remember: ${fact}`, facts };
   }
 
   const isRule = q.match(/^(.+?)\s+(is|are|means|=|equals)\s+(?:an?\s+|the\s+)?(.+)$/i);
-  const transferRule = q.match(
-    /^(.+?)\s+is\s+(?:a\s+)?transfers?\s+to\s+(.+)$/i,
-  ) || q.match(/^treat\s+(.+?)\s+as\s+(?:a\s+)?transfers?\s+to\s+(.+)$/i);
+  const transferRule = q.match(/^(.+?)\s+is\s+(?:a\s+)?transfers?\s+to\s+(.+)$/i)
+    || q.match(/^treat\s+(.+?)\s+as\s+(?:a\s+)?transfers?\s+to\s+(.+)$/i);
 
   if (transferRule) {
     const pattern = transferRule[1].replace(/^anything (to|from|with)\s+/i, "").trim();
@@ -84,8 +169,7 @@ export function interpretChat(input: string, ctx: BrainContext): BrainEffect {
     const pattern = isRule[1].replace(/^(treat|call|mark)\s+/i, "").trim();
     const target = isRule[3].replace(/\.$/, "").trim();
     if (/transfer/.test(target) && / to /.test(target)) {
-      const to = target.replace(/^.*\bto\s+/i, "");
-      return interpretChat(`${pattern} is a transfer to ${to}`, ctx);
+      return interpretChat(`${pattern} is a transfer to ${target.replace(/^.*\bto\s+/i, "")}`, ctx);
     }
     const categoryId = resolveCategoryAlias(target);
     if (categoryId) {
@@ -116,16 +200,17 @@ export function interpretChat(input: string, ctx: BrainContext): BrainEffect {
   }
 
   if (/list (my )?rules|what do you remember|memory/.test(q)) {
-    if (!ctx.rules.length) return { reply: "No rules yet. Say something like “Sharesies is investing”." };
-    return {
-      reply: ctx.rules
-        .map((r) =>
-          r.kind === "transfer"
-            ? `• “${r.pattern}” → transfer to ${r.accountName}`
-            : `• “${r.pattern}” → ${getCategory(r.categoryId ?? "other").name}`,
-        )
-        .join("\n"),
-    };
+    const bits: string[] = [];
+    if (ctx.rules.length) {
+      bits.push(ctx.rules.map((r) =>
+        r.kind === "transfer"
+          ? `• “${r.pattern}” → transfer to ${r.accountName}`
+          : `• “${r.pattern}” → ${getCategory(r.categoryId ?? "other").name}`,
+      ).join("\n"));
+    }
+    if (ctx.facts?.length) bits.push(ctx.facts.map((f) => `• ${f.text}`).join("\n"));
+    if (!bits.length) return { reply: "No rules yet. Say something like “Sharesies is investing”." };
+    return { reply: bits.join("\n") };
   }
 
   if (/list (my )?accounts|which accounts/.test(q)) {
@@ -186,15 +271,22 @@ export function interpretChat(input: string, ctx: BrainContext): BrainEffect {
     return { reply: `Forgot the rule for “${dropped?.pattern}”.`, rules, transactions };
   }
 
+  if (/kiwisaver|pir\b|emergency fund|50\/30\/20/.test(q)) {
+    const extra = answerFromSnapshot("emergency fund", snap);
+    return {
+      reply: `${extra ? extra + "\n\n" : ""}From 1 April 2026 the default KiwiSaver rate is 3.5% employee + 3.5% employer. Government contribution is 25c per $1 you put in, capped at $260.72, and stops above $180k income. PIE funds (Sharesies etc.) use PIR 10.5 / 17.5 / 28%.`,
+    };
+  }
+
   const classified = classifyNote(text, "expense", ctx.rules);
   if (classified.categoryId !== "other") {
     return {
-      reply: `I would file that under ${getCategory(classified.categoryId).name}. Say “${prettyPayee(text)} is …” if that’s wrong.`,
+      reply: `I would file that under ${getCategory(classified.categoryId).name}. Say “${prettyPayee(text)} is …” if that’s wrong, or ask a full question and I’ll use your live books.`,
     };
   }
 
   const known = CATEGORIES.map((c) => c.name.toLowerCase());
   return {
-    reply: `I can remember rules, retag entries, and track transfers between accounts. Names I know: ${known.slice(0, 8).join(", ")}…`,
+    reply: `I can change budgets, retag payees, log entries, and answer from your actual ledger plus NZ tax/KiwiSaver rules. Try “how am I doing?”. Categories I know: ${known.slice(0, 8).join(", ")}…`,
   };
 }
