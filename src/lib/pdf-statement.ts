@@ -1,6 +1,6 @@
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
-import { extractPdfFallback, hasText, itemsToText, looksLikeLedger } from "./pdf-fallback";
+import { extractPdfFallback, hasText, installPakoInflate, itemsToText, looksLikeLedger } from "./pdf-fallback";
 
 export { extractPdfFallback, hasText, looksLikeLedger };
 
@@ -11,9 +11,14 @@ function publicWorkerSrc() {
 
 let workerBoot: Promise<void> | null = null;
 
+export function preloadPdfEngine() {
+  return bootWorker();
+}
+
 function bootWorker() {
   if (!workerBoot) {
     workerBoot = (async () => {
+      installPakoInflate();
       try {
         GlobalWorkerOptions.workerSrc = publicWorkerSrc();
       } catch {
@@ -34,12 +39,14 @@ function bootWorker() {
 export class PdfOpenError extends Error {
   constructor(
     message: string,
-    readonly kind: "password" | "empty" | "corrupt" | "timeout",
+    readonly kind: "password" | "empty" | "corrupt",
   ) {
     super(message);
     this.name = "PdfOpenError";
   }
 }
+
+export type PdfProgress = { page: number; pages: number };
 
 function isPasswordError(err: unknown) {
   const e = err as { name?: string; code?: number; message?: string } | null;
@@ -56,19 +63,11 @@ function copyBytes(data: ArrayBuffer) {
   return out;
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string) {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) => {
-      timer = setTimeout(() => reject(new Error(label)), ms);
-    }),
-  ]).finally(() => {
-    if (timer) clearTimeout(timer);
-  });
-}
-
-async function extractOnce(data: Uint8Array, password: string | undefined) {
+async function extractWithPdfJs(
+  data: Uint8Array,
+  password: string | undefined,
+  onProgress?: (info: PdfProgress) => void,
+) {
   await bootWorker();
   const task = getDocument({
     data,
@@ -81,12 +80,15 @@ async function extractOnce(data: Uint8Array, password: string | undefined) {
     useSystemFonts: true,
     enableXfa: false,
     disableFontFace: true,
+    isOffscreenCanvasSupported: false,
   });
   try {
     const pdf = await task.promise;
     const pages: string[] = [];
     const loosePages: string[] = [];
-    for (let i = 1; i <= pdf.numPages; i++) {
+    const total = pdf.numPages;
+    for (let i = 1; i <= total; i++) {
+      onProgress?.({ page: i, pages: total });
       const page = await pdf.getPage(i);
       let content: { items: unknown[] };
       try {
@@ -97,6 +99,7 @@ async function extractOnce(data: Uint8Array, password: string | undefined) {
       const { lines, loose } = itemsToText(content.items as unknown[]);
       pages.push(lines);
       loosePages.push(loose);
+      await new Promise((r) => setTimeout(r, 0));
     }
     const lined = pages.join("\n");
     const loose = loosePages.join("\n");
@@ -110,38 +113,57 @@ async function extractOnce(data: Uint8Array, password: string | undefined) {
   }
 }
 
-export async function extractPdfText(data: ArrayBuffer, password?: string): Promise<string> {
+function ledgerScore(t: string) {
+  if (!t) return 0;
+  let n = 0;
+  for (const line of t.split("\n")) {
+    if (/(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2}/.test(line) && /\d/.test(line)) n += 1;
+  }
+  return n * 10 + Math.min(t.length, 50_000) / 1000;
+}
+
+function betterText(a: string, b: string) {
+  return ledgerScore(a) >= ledgerScore(b) ? a : b;
+}
+
+export async function extractPdfText(
+  data: ArrayBuffer,
+  password?: string,
+  onProgress?: (info: PdfProgress) => void,
+): Promise<string> {
+  installPakoInflate();
   let fallback = "";
   try {
     fallback = await extractPdfFallback(data);
   } catch {
     fallback = "";
   }
-  if (looksLikeLedger(fallback)) return fallback;
 
-  let last: unknown;
+  if (looksLikeLedger(fallback) && !password) {
+    onProgress?.({ page: 1, pages: 1 });
+    return fallback;
+  }
+
+  let pdfjsText = "";
   try {
-    const text = await withTimeout(extractOnce(copyBytes(data), password), 8000, "pdfjs-timeout");
-    if (hasText(text)) return text;
+    pdfjsText = await extractWithPdfJs(copyBytes(data), password, onProgress);
   } catch (err) {
-    last = err;
     if (isPasswordError(err)) {
       throw new PdfOpenError(
         "This PDF is locked. Enter the password from your bank (often your date of birth or customer number).",
         "password",
       );
     }
+    if (!hasText(fallback)) {
+      throw new PdfOpenError(
+        "That PDF could not be read. Try another export, or download the CSV from internet banking.",
+        "corrupt",
+      );
+    }
   }
 
-  if (hasText(fallback)) return fallback;
-
-  if (last instanceof PdfOpenError) throw last;
-  if (isPasswordError(last)) {
-    throw new PdfOpenError(
-      "This PDF is locked. Enter the password from your bank (often your date of birth or customer number).",
-      "password",
-    );
-  }
+  const text = betterText(pdfjsText, fallback);
+  if (hasText(text) || looksLikeLedger(text)) return text;
   throw new PdfOpenError(
     "That PDF could not be read. Try another export, or download the CSV from internet banking.",
     "corrupt",

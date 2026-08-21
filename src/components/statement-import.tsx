@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,11 @@ export function StatementImport() {
   const [needsPassword, setNeedsPassword] = useState(false);
   const [accountId, setAccountId] = useState("");
   const [newAccount, setNewAccount] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    void import("@/lib/pdf-statement").then((m) => m.preloadPdfEngine());
+  }, [open]);
 
   function reset() {
     setRows([]);
@@ -193,7 +198,7 @@ export function StatementImport() {
         <DialogHeader>
           <DialogTitle>Upload statement</DialogTitle>
           <DialogDescription>
-            PDF, CSV, OFX or QIF from any New Zealand bank. Cove reads income and expenses automatically.
+            PDF, CSV, OFX or QIF from any New Zealand bank. Every page is read — there is no page or size cap.
           </DialogDescription>
         </DialogHeader>
 
@@ -226,9 +231,9 @@ export function StatementImport() {
               )}
             >
               <Upload className="size-5 text-muted-foreground" strokeWidth={1.75} />
-              <p className="text-sm font-medium">{busy ? "Reading…" : "Drop a bank statement here"}</p>
+              <p className="text-sm font-medium">{busy ? "Reading every page…" : "Drop a bank statement here"}</p>
               <p className="max-w-xs text-[12px] text-muted-foreground">
-                ANZ, ASB, Westpac, BNZ, Kiwibank, TSB — CSV or PDF. Withdrawals become expenses, deposits become income.
+                ANZ, ASB, Westpac, BNZ, Kiwibank, TSB — CSV or PDF, any length. Withdrawals become expenses, deposits become income.
               </p>
             </button>
             {error ? <p className="text-sm text-destructive">{error}</p> : null}

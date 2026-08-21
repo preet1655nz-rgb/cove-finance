@@ -87,9 +87,6 @@ export async function readStatementFile(file: File, password?: string): Promise<
     if (file.size < 32) {
       return fail("That file looks empty. If it is in iCloud or Files, wait for it to finish downloading and try again.");
     }
-    if (file.size > 12_000_000) {
-      return fail("That file is too large. Export a CSV or PDF of a single month instead.");
-    }
     const buf = await file.arrayBuffer();
     const kind = sniffFile(buf);
     const namedPdf = /\.pdf$/i.test(file.name || "") || file.type === "application/pdf";
@@ -98,55 +95,31 @@ export async function readStatementFile(file: File, password?: string): Promise<
     }
     if (kind === "pdf" || (namedPdf && kind !== "image")) {
       try {
-        // Fast path: inflate FlateDecode streams. Never loads the 1.2MB pdf.js
-        // worker, so ANZ Go (and similar) cannot hit the timeout.
-        const { extractPdfFallback, looksLikeLedger } = await import("./pdf-fallback");
-        let fallback = "";
+        const { extractPdfText, extractPdfFallback, looksLikeLedger, PdfOpenError } = await import("./pdf-statement");
+        let text = "";
         try {
-          fallback = await Promise.race([
-            extractPdfFallback(buf),
-            new Promise<string>((resolve) => setTimeout(() => resolve(""), 6000)),
-          ]);
-        } catch {
-          fallback = "";
-        }
-        if (looksLikeLedger(fallback)) {
-          const parsed = parseBankStatement(fallback, file.name || "statement.pdf");
-          if (parsed.ok) return parsed;
-        }
-
-        const { extractPdfText, PdfOpenError } = await import("./pdf-statement");
-        try {
-          const text = await Promise.race([
-            extractPdfText(buf, password),
-            new Promise<string>((_, reject) => {
-              setTimeout(
-                () => reject(new PdfOpenError("That PDF could not be read quickly enough. Try a CSV from internet banking.", "timeout")),
-                10000,
-              );
-            }),
-          ]);
-          const parsed = parseBankStatement(text, file.name || "statement.pdf");
-          if (!parsed.ok && looksLikeLedger(fallback)) {
-            return parseBankStatement(fallback, file.name || "statement.pdf");
-          }
-          if (!parsed.ok) {
-            return fail(
-              parsed.error ??
-                "No dates and amounts were found in that PDF. Download the CSV from internet banking instead.",
-            );
-          }
-          return parsed;
+          text = await extractPdfText(buf, password);
         } catch (err) {
-          if (looksLikeLedger(fallback)) {
-            const parsed = parseBankStatement(fallback, file.name || "statement.pdf");
-            if (parsed.ok) return parsed;
-          }
           if (err instanceof PdfOpenError) {
             return fail(err.message, { needsPassword: err.kind === "password" });
           }
           throw err;
         }
+        const parsed = parseBankStatement(text, file.name || "statement.pdf");
+        if (parsed.ok) return parsed;
+        try {
+          const fallback = await extractPdfFallback(buf);
+          if (looksLikeLedger(fallback)) {
+            const again = parseBankStatement(fallback, file.name || "statement.pdf");
+            if (again.ok) return again;
+          }
+        } catch {
+          /* already tried */
+        }
+        return fail(
+          parsed.error ??
+            "No dates and amounts were found in that PDF. Download the CSV from internet banking instead.",
+        );
       } catch (err) {
         const { PdfOpenError } = await import("./pdf-statement");
         if (err instanceof PdfOpenError) {

@@ -16,3 +16,4 @@ AGENTS.project.md
 .grok
 scripts/qa-cove.mjs
 /tmp
+scripts/fixtures/statements/generated
