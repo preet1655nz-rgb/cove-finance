@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowUpRight } from "lucide-react";
+import { useMemo, useState } from "react";
 import { CategoryDonut, FlowChart } from "@/components/charts";
 import { PageFrame } from "@/components/page-frame";
 import { PeriodSelect } from "@/components/period-select";
@@ -7,7 +8,7 @@ import { TransactionRow } from "@/components/transaction-row";
 import { Progress } from "@/components/ui/progress";
 import { getCategory } from "@/lib/categories";
 import { money, pct, signedMoney } from "@/lib/format";
-import { needsReconcile } from "@/lib/intelligence";
+import { livingTxs, needsReconcile } from "@/lib/intelligence";
 import { cashBuckets, activeRange, spentInCategory } from "@/lib/period";
 import { explainNegativeCash } from "@/lib/cycle";
 import { useFinanceStore } from "@/lib/store";
@@ -35,6 +36,7 @@ function Dashboard() {
   const currency = useFinanceStore((s) => s.settings.currency);
   const range = activeRange(txs, period, cycleMode, cycleOffset);
   const slice = txs.filter((t) => inRange(t.date, range.from, range.to));
+  const lived = livingTxs(slice);
   const b = cashBuckets(slice);
   const all = cashBuckets(txs);
   const { label } = range;
@@ -51,18 +53,29 @@ function Dashboard() {
     .slice(0, 4);
   const openRec = txs.filter(needsReconcile).length;
   const cashStory = explainNegativeCash(slice, currency);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+
+  const categoryBreakdown = useMemo(() => {
+    if (!selectedCategoryId) return [];
+    return lived
+      .filter((t) => t.categoryId === selectedCategoryId && t.type === "expense")
+      .sort((a, b) => (a.date < b.date ? 1 : -1))
+      .slice(0, 40);
+  }, [lived, selectedCategoryId]);
+
+  const categoryTotal = categoryBreakdown.reduce((s, t) => s + t.amount, 0);
 
   return (
-    <div className="space-y-8">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+    <div className="space-y-6 sm:space-y-8">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+        <div className="min-w-0">
           <p className="text-[13px] text-muted-foreground">
             {name.trim() ? `Good to see you, ${name}` : "A clean start"}
           </p>
           <h1 className="mt-1 font-display text-3xl tracking-tight sm:text-4xl">Overview</h1>
         </div>
         {cycleMode ? (
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
               className="h-9 rounded-md bg-muted px-3 text-[13px] font-medium"
@@ -81,9 +94,9 @@ function Dashboard() {
         )}
       </header>
 
-      <section className="rounded-xl bg-card p-6 shadow-card sm:p-8">
+      <section className="rounded-xl bg-card p-5 shadow-card sm:p-6 lg:p-8">
         <p className="text-[13px] text-muted-foreground">Cash in this account · {label.toLowerCase()}</p>
-        <p className="mt-2 font-display text-5xl tracking-tight tabular-nums sm:text-6xl">
+        <p className="mt-2 font-display text-4xl tracking-tight tabular-nums sm:text-5xl lg:text-6xl">
           {signedMoney(b.cash, currency)}
         </p>
         <p className="mt-3 text-sm text-muted-foreground">
@@ -101,7 +114,7 @@ function Dashboard() {
             </Link>
           </p>
         ) : null}
-        <div className="mt-8 grid grid-cols-2 gap-4 border-t border-border pt-6 sm:grid-cols-4">
+        <div className="mt-6 grid grid-cols-2 gap-3 border-t border-border pt-5 sm:mt-8 sm:grid-cols-4 sm:gap-4 sm:pt-6">
           <Stat label="Income" value={money(b.income, currency, true)} tone="income" />
           <Stat label="Living" value={money(b.expense, currency, true)} tone="expense" />
           <Stat label="Investing" value={money(b.investing, currency, true)} />
@@ -121,24 +134,65 @@ function Dashboard() {
       </section>
 
       <div className="grid gap-4 lg:grid-cols-5">
-        <section className="rounded-xl bg-card p-5 shadow-card lg:col-span-3">
-          <div className="mb-4 flex items-center justify-between">
+        <section className="rounded-xl bg-card p-4 shadow-card sm:p-5 lg:col-span-3">
+          <div className="mb-4 flex items-center justify-between gap-2">
             <h2 className="text-sm font-medium">Income vs living</h2>
             <span className="text-[12px] text-muted-foreground">Six months</span>
           </div>
           <FlowChart txs={txs} currency={currency} />
         </section>
-        <section className="rounded-xl bg-card p-5 shadow-card lg:col-span-2">
-          <div className="mb-2 flex items-center justify-between">
+        <section className="rounded-xl bg-card p-4 shadow-card sm:p-5 lg:col-span-2">
+          <div className="mb-2 flex items-center justify-between gap-2">
             <h2 className="text-sm font-medium">Living spend</h2>
-            <span className="text-[12px] text-muted-foreground">{label}</span>
+            <span className="truncate text-[12px] text-muted-foreground">{label}</span>
           </div>
-          <CategoryDonut txs={slice} currency={currency} showAmounts />
+          <CategoryDonut
+            txs={lived}
+            currency={currency}
+            showAmounts
+            selectedId={selectedCategoryId}
+            onSelect={setSelectedCategoryId}
+          />
+          {selectedCategoryId ? (
+            <div className="mt-4 border-t border-border pt-4">
+              <div className="mb-3 flex items-baseline justify-between gap-2">
+                <h3 className="text-sm font-medium">{getCategory(selectedCategoryId).name}</h3>
+                <p className="text-[12px] tabular-nums text-muted-foreground">
+                  {categoryBreakdown.length} · {money(categoryTotal, currency)}
+                </p>
+              </div>
+              {categoryBreakdown.length ? (
+                <ul className="max-h-52 space-y-2 overflow-y-auto">
+                  {categoryBreakdown.map((t) => (
+                    <li key={t.id} className="flex items-baseline justify-between gap-2 text-[13px]">
+                      <span className="min-w-0 truncate">
+                        <span className="text-muted-foreground">{t.date}</span>
+                        {" · "}
+                        {t.note || getCategory(t.categoryId).name}
+                      </span>
+                      <span className="shrink-0 tabular-nums">{money(t.amount, currency)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">No entries in this period.</p>
+              )}
+              <button
+                type="button"
+                className="mt-3 text-[12px] text-muted-foreground underline-offset-4 hover:underline"
+                onClick={() => setSelectedCategoryId(null)}
+              >
+                Clear selection
+              </button>
+            </div>
+          ) : (
+            <p className="mt-3 text-[12px] text-muted-foreground">Tap a slice or label to see every entry.</p>
+          )}
         </section>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded-xl bg-card p-5 shadow-card">
+        <section className="rounded-xl bg-card p-4 shadow-card sm:p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-sm font-medium">Budgets this month</h2>
             <Link to="/budgets" className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground">
@@ -167,7 +221,7 @@ function Dashboard() {
             <p className="py-8 text-sm text-muted-foreground">No budgets yet.</p>
           )}
         </section>
-        <section className="rounded-xl bg-card p-5 shadow-card">
+        <section className="rounded-xl bg-card p-4 shadow-card sm:p-5">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-medium">Recent</h2>
             <Link to="/activity" className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground">
