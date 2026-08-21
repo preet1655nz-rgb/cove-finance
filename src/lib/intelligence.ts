@@ -165,6 +165,16 @@ export function livingTxs<T extends { categoryId: string; transfer?: TransferLeg
   return txs.filter((t) => !isTransferTx(t));
 }
 
+export function needsReconcile(t: { categoryId: string; note: string; transfer?: TransferLeg; reviewed?: boolean }) {
+  if (t.reviewed) return false;
+  if (isTransferTx(t)) return false;
+  if (t.categoryId === "other" || t.categoryId === "other-income") return true;
+  const note = t.note.trim();
+  if (!note) return true;
+  if (/^(DD|DC|BP|AP|VT|EP|AT|CQ)\s*$/i.test(note)) return true;
+  return false;
+}
+
 function dayOffset(a: string, b: string) {
   return Math.abs((Date.parse(a) - Date.parse(b)) / 86400000);
 }

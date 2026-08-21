@@ -7,8 +7,8 @@ import { TransactionRow } from "@/components/transaction-row";
 import { Progress } from "@/components/ui/progress";
 import { getCategory } from "@/lib/categories";
 import { money, pct, signedMoney } from "@/lib/format";
-import { livingTxs } from "@/lib/intelligence";
-import { inPeriod, netOf, periodRange, spentInCategory } from "@/lib/period";
+import { needsReconcile } from "@/lib/intelligence";
+import { cashBuckets, inPeriod, periodRange, spentInCategory } from "@/lib/period";
 import { useFinanceStore } from "@/lib/store";
 import { endOfMonth, startOfMonth, todayISO } from "@/lib/utils";
 
@@ -30,23 +30,22 @@ function Dashboard() {
   const name = useFinanceStore((s) => s.settings.displayName);
   const currency = useFinanceStore((s) => s.settings.currency);
   const slice = txs.filter((t) => inPeriod(t, period));
-  const lived = livingTxs(slice);
-  const income = lived.filter((t) => t.type === "income").reduce((s, x) => s + x.amount, 0);
-  const expense = lived.filter((t) => t.type === "expense").reduce((s, x) => s + x.amount, 0);
-  const net = income - expense;
-  const balance = netOf(txs);
+  const b = cashBuckets(slice);
+  const all = cashBuckets(txs);
   const { label } = periodRange(period);
-  const recent = [...txs].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)).slice(0, 6);
+  const recent = [...txs].sort((a, x) => (a.date < x.date ? 1 : a.date > x.date ? -1 : 0)).slice(0, 6);
   const today = todayISO();
   const from = startOfMonth(today);
   const to = endOfMonth(today);
   const budgetRows = budgets
-    .map((b) => {
-      const spent = spentInCategory(txs, b.categoryId, from, to);
-      return { ...b, spent, cat: getCategory(b.categoryId), ratio: b.amount ? spent / b.amount : 0 };
+    .map((row) => {
+      const spent = spentInCategory(txs, row.categoryId, from, to);
+      return { ...row, spent, cat: getCategory(row.categoryId), ratio: row.amount ? spent / row.amount : 0 };
     })
-    .sort((a, b) => b.ratio - a.ratio)
+    .sort((a, x) => x.ratio - a.ratio)
     .slice(0, 4);
+  const openRec = txs.filter(needsReconcile).length;
+  const addsUp = Math.abs(b.income - (b.expense + b.investing + b.savings + b.credit) - b.cash) < 0.01;
 
   return (
     <div className="space-y-8">
@@ -61,31 +60,52 @@ function Dashboard() {
       </header>
 
       <section className="rounded-xl bg-card p-6 shadow-card sm:p-8">
-        <p className="text-[13px] text-muted-foreground">Balance</p>
-        <p className="mt-2 font-display text-5xl tracking-tight tabular-nums sm:text-6xl">{money(balance, currency, true)}</p>
+        <p className="text-[13px] text-muted-foreground">Cash in this account · {label.toLowerCase()}</p>
+        <p className="mt-2 font-display text-5xl tracking-tight tabular-nums sm:text-6xl">
+          {signedMoney(b.cash, currency)}
+        </p>
         <p className="mt-3 text-sm text-muted-foreground">
           {txs.length
-            ? `${signedMoney(net, currency)} ${label.toLowerCase()}`
+            ? `Income ${money(b.income, currency)} − living ${money(b.expense, currency)} − investing ${money(b.investing, currency)} − savings ${money(b.savings, currency)}${b.credit ? ` − cards ${money(b.credit, currency)}` : ""} = cash movement. Transfers between your accounts are ignored.`
             : "No entries yet. Add one, or upload a statement."}
         </p>
-        <div className="mt-8 grid grid-cols-3 gap-4 border-t border-border pt-6">
-          <Stat label="In" value={money(income, currency, true)} tone="income" />
-          <Stat label="Out" value={money(expense, currency, true)} tone="expense" />
-          <Stat label="Net" value={signedMoney(net, currency)} />
+        {!addsUp ? (
+          <p className="mt-2 text-sm text-expense">These four streams should always add up. Something is missing — open Reconcile.</p>
+        ) : null}
+        {openRec ? (
+          <p className="mt-2 text-sm">
+            <Link to="/reconcile" className="text-foreground underline-offset-2 hover:underline">
+              {openRec} unnamed or uncategorised {openRec === 1 ? "entry needs" : "entries need"} matching
+            </Link>
+          </p>
+        ) : null}
+        <div className="mt-8 grid grid-cols-2 gap-4 border-t border-border pt-6 sm:grid-cols-4">
+          <Stat label="Income" value={money(b.income, currency, true)} tone="income" />
+          <Stat label="Living" value={money(b.expense, currency, true)} tone="expense" />
+          <Stat label="Investing" value={money(b.investing, currency, true)} />
+          <Stat label="Savings" value={money(b.savings, currency, true)} />
         </div>
+        {b.credit > 0 ? (
+          <p className="mt-4 text-[12px] text-muted-foreground">
+            Credit card payments {money(b.credit, currency)} sit outside living spend.
+          </p>
+        ) : null}
+        <p className="mt-3 text-[12px] text-muted-foreground">
+          All-time cash movement {signedMoney(all.cash, currency)} (income {money(all.income, currency)}).
+        </p>
       </section>
 
       <div className="grid gap-4 lg:grid-cols-5">
         <section className="rounded-xl bg-card p-5 shadow-card lg:col-span-3">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-medium">Cash flow</h2>
+            <h2 className="text-sm font-medium">Income vs living</h2>
             <span className="text-[12px] text-muted-foreground">Six months</span>
           </div>
           <FlowChart txs={txs} currency={currency} />
         </section>
         <section className="rounded-xl bg-card p-5 shadow-card lg:col-span-2">
           <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-medium">Spending</h2>
+            <h2 className="text-sm font-medium">Living spend</h2>
             <span className="text-[12px] text-muted-foreground">{label}</span>
           </div>
           <CategoryDonut txs={slice} currency={currency} />
@@ -102,19 +122,19 @@ function Dashboard() {
           </div>
           {budgetRows.length ? (
             <ul className="space-y-4">
-              {budgetRows.map((b) => (
-                <li key={b.id}>
+              {budgetRows.map((row) => (
+                <li key={row.id}>
                   <div className="mb-1.5 flex items-baseline justify-between gap-2 text-[13px]">
-                    <span>{b.cat.name}</span>
+                    <span>{row.cat.name}</span>
                     <span className="tabular-nums text-muted-foreground">
-                      {money(b.spent, currency)} / {money(b.amount, currency)}
+                      {money(row.spent, currency)} / {money(row.amount, currency)}
                     </span>
                   </div>
                   <Progress
-                    value={b.ratio * 100}
-                    indicatorClassName={b.ratio >= 1 ? "bg-expense" : b.ratio >= 0.8 ? "bg-chart-5" : "bg-income"}
+                    value={row.ratio * 100}
+                    indicatorClassName={row.ratio >= 1 ? "bg-expense" : row.ratio >= 0.8 ? "bg-chart-5" : "bg-income"}
                   />
-                  <p className="mt-1 text-[11px] text-muted-foreground">{pct(b.ratio * 100)} used</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">{pct(row.ratio * 100)} used</p>
                 </li>
               ))}
             </ul>
@@ -129,7 +149,9 @@ function Dashboard() {
               Activity <ArrowUpRight className="size-3.5" />
             </Link>
           </div>
-          {recent.length ? recent.map((tx) => <TransactionRow key={tx.id} tx={tx} />) : (
+          {recent.length ? (
+            recent.map((tx) => <TransactionRow key={tx.id} tx={tx} />)
+          ) : (
             <p className="py-8 text-sm text-muted-foreground">Add your first entry with the Add button, or press N.</p>
           )}
         </section>

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageFrame } from "@/components/page-frame";
 import { Button } from "@/components/ui/button";
@@ -7,8 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { CATEGORIES, categoriesFor, getCategory } from "@/lib/categories";
+import { categoriesFor, getCategory } from "@/lib/categories";
 import { money, pct } from "@/lib/format";
 import { spentInCategory } from "@/lib/period";
 import { useFinanceStore } from "@/lib/store";
@@ -28,17 +27,12 @@ function BudgetsPage() {
 function Budgets() {
   const txs = useFinanceStore((s) => s.transactions);
   const budgets = useFinanceStore((s) => s.budgets);
-  const bills = useFinanceStore((s) => s.bills);
   const upsertBudget = useFinanceStore((s) => s.upsertBudget);
   const removeBudget = useFinanceStore((s) => s.removeBudget);
-  const upsertBill = useFinanceStore((s) => s.upsertBill);
-  const removeBill = useFinanceStore((s) => s.removeBill);
   const currency = useFinanceStore((s) => s.settings.currency);
   const [open, setOpen] = useState(false);
-  const [billOpen, setBillOpen] = useState(false);
   const [cat, setCat] = useState("groceries");
   const [amt, setAmt] = useState("500");
-  const [bill, setBill] = useState({ name: "", amount: "", day: "1", categoryId: "utilities" });
 
   const today = todayISO();
   const from = startOfMonth(today);
@@ -56,12 +50,12 @@ function Budgets() {
     <div className="space-y-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-[13px] text-muted-foreground">Caps and repeating bills</p>
+          <p className="text-[13px] text-muted-foreground">Monthly caps. Bills live on the Bills tab.</p>
           <h1 className="mt-1 font-display text-3xl tracking-tight">Budgets</h1>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setBillOpen(true)}>
-            Add bill
+          <Button variant="outline" asChild>
+            <Link to="/bills">Bills</Link>
           </Button>
           <Button onClick={() => setOpen(true)}>Add budget</Button>
         </div>
@@ -131,39 +125,6 @@ function Budgets() {
         )}
       </section>
 
-      <section>
-        <h2 className="mb-3 font-display text-2xl tracking-tight">Bills</h2>
-        <div className="space-y-2">
-          {bills.length === 0 ? (
-            <p className="rounded-xl bg-card px-5 py-10 text-center text-sm text-muted-foreground shadow-card">
-              Track rent, fibre, and subscriptions. Notices fire a few days before they are due.
-            </p>
-          ) : (
-            bills.map((billRow) => (
-              <article key={billRow.id} className="flex items-center gap-3 rounded-xl bg-card px-4 py-3 shadow-card">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{billRow.name}</p>
-                  <p className="text-[12px] text-muted-foreground">
-                    {getCategory(billRow.categoryId).name} · day {billRow.dayOfMonth} · {money(billRow.amount, currency)}
-                  </p>
-                </div>
-                <Switch
-                  checked={billRow.enabled}
-                  onCheckedChange={(enabled) => upsertBill({ ...billRow, enabled })}
-                />
-                <button
-                  type="button"
-                  className="text-[12px] text-muted-foreground hover:text-destructive"
-                  onClick={() => removeBill(billRow.id)}
-                >
-                  Remove
-                </button>
-              </article>
-            ))
-          )}
-        </div>
-      </section>
-
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
@@ -198,64 +159,6 @@ function Budgets() {
             <div className="flex flex-col gap-1.5">
               <Label>Amount</Label>
               <Input value={amt} inputMode="decimal" onChange={(e) => setAmt(e.target.value)} />
-            </div>
-            <Button type="submit">Save</Button>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={billOpen} onOpenChange={setBillOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Recurring bill</DialogTitle>
-          </DialogHeader>
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const n = Number(bill.amount);
-              const day = Number(bill.day);
-              if (!bill.name.trim() || !n) return toast.error("Name and amount are required");
-              upsertBill({
-                name: bill.name.trim(),
-                amount: n,
-                dayOfMonth: Math.min(28, Math.max(1, day || 1)),
-                categoryId: bill.categoryId,
-                enabled: true,
-              });
-              setBillOpen(false);
-              setBill({ name: "", amount: "", day: "1", categoryId: "utilities" });
-              toast.success("Bill saved");
-            }}
-          >
-            <div className="flex flex-col gap-1.5">
-              <Label>Name</Label>
-              <Input value={bill.name} onChange={(e) => setBill({ ...bill, name: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label>Amount</Label>
-                <Input value={bill.amount} inputMode="decimal" onChange={(e) => setBill({ ...bill, amount: e.target.value })} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>Day of month</Label>
-                <Input value={bill.day} inputMode="numeric" onChange={(e) => setBill({ ...bill, day: e.target.value })} />
-              </div>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Category</Label>
-              <Select value={bill.categoryId} onValueChange={(categoryId) => setBill({ ...bill, categoryId })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES.filter((c) => c.type === "expense").map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
             <Button type="submit">Save</Button>
           </form>

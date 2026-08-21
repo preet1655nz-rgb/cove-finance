@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { getCategory } from "@/lib/categories";
 import { money } from "@/lib/format";
 import { isTransferTx, livingTxs, payeeBreakdown, transferFlows } from "@/lib/intelligence";
-import { inPeriod, monthlySeries, periodRange, spentInCategory } from "@/lib/period";
+import { cashBuckets, inPeriod, periodRange, spentInCategory } from "@/lib/period";
 import { useFinanceStore } from "@/lib/store";
 import { endOfMonth, startOfMonth, todayISO } from "@/lib/utils";
 
@@ -32,25 +32,15 @@ function Insights() {
   const slice = txs.filter((t) => inPeriod(t, period));
   const lived = livingTxs(slice);
   const { label, from, to } = periodRange(period);
-  const income = lived.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
-  const expense = lived.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+  const buckets = cashBuckets(slice);
   const moved = slice.filter((t) => t.type === "expense" && isTransferTx(t)).reduce((s, t) => s + t.amount, 0);
   const days = Math.max(1, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86400000) + 1);
-  const series = monthlySeries(livingTxs(txs), 6);
-  const last = series[series.length - 1];
-  const prev = series[series.length - 2];
-  const delta = prev ? last.expense - prev.expense : 0;
   const today = todayISO();
   const bars = budgets.map((b) => ({
     name: getCategory(b.categoryId).name,
     spent: spentInCategory(txs, b.categoryId, startOfMonth(today), endOfMonth(today)),
     budget: b.amount,
   }));
-  const top = [...lived.filter((t) => t.type === "expense")].reduce<Map<string, number>>(
-    (m, t) => m.set(t.categoryId, (m.get(t.categoryId) ?? 0) + t.amount),
-    new Map(),
-  );
-  const topCat = [...top.entries()].sort((a, b) => b[1] - a[1])[0];
   const flows = transferFlows(slice);
   const otherPayees = payeeBreakdown(
     lived.filter((t) => t.categoryId === "other" || t.categoryId === "other-income"),
@@ -59,24 +49,24 @@ function Insights() {
 
   const cards = [
     {
-      title: "Daily spend",
-      body: money(expense / days, currency),
-      hint: `Lived spend · ${label.toLowerCase()}`,
+      title: "Income",
+      body: money(buckets.income, currency, true),
+      hint: `${label} · not transfers`,
     },
     {
-      title: "Savings rate",
-      body: income ? `${Math.round(((income - expense) / income) * 100)}%` : "—",
-      hint: "Transfers between your accounts ignored",
+      title: "Living",
+      body: money(buckets.expense, currency, true),
+      hint: `${money(buckets.expense / days, currency)} / day`,
     },
     {
-      title: "Vs last month",
-      body: prev ? `${delta >= 0 ? "+" : "−"}${money(Math.abs(delta), currency)}` : "—",
-      hint: "Change in lived spending",
+      title: "Investing",
+      body: money(buckets.investing, currency, true),
+      hint: "Sharesies and the like",
     },
     {
-      title: "Largest slice",
-      body: topCat ? getCategory(topCat[0]).name : "—",
-      hint: topCat ? money(topCat[1], currency) : "No expenses yet",
+      title: "Savings",
+      body: money(buckets.savings, currency, true),
+      hint: buckets.income ? `${Math.round((buckets.savings / buckets.income) * 100)}% of income` : "Kept separate from living",
     },
   ];
 

@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { getCategory } from "@/lib/categories";
 import { formatMonth, money } from "@/lib/format";
 import { downloadMonthlyPdf } from "@/lib/pdf";
-import { monthlySeries, spentInCategory } from "@/lib/period";
+import { monthlySeries, spentInCategory, cashBuckets } from "@/lib/period";
 import { useFinanceStore } from "@/lib/store";
 import { endOfMonth, inRange, monthKey, startOfMonth, todayISO } from "@/lib/utils";
 import { toast } from "sonner";
@@ -37,9 +37,8 @@ function Reports() {
   const from = startOfMonth(`${month}-01`);
   const to = endOfMonth(from);
   const slice = txs.filter((t) => inRange(t.date, from, to));
-  const income = slice.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
-  const expense = slice.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
-  const byCat = [...slice.filter((t) => t.type === "expense")].reduce<Map<string, number>>((m, t) => {
+  const buckets = cashBuckets(slice);
+  const byCat = [...slice.filter((t) => t.type === "expense" && t.categoryId !== "transfer-out")].reduce<Map<string, number>>((m, t) => {
     m.set(t.categoryId, (m.get(t.categoryId) ?? 0) + t.amount);
     return m;
   }, new Map());
@@ -87,11 +86,15 @@ function Reports() {
       <section className="rounded-xl bg-card p-6 shadow-card">
         <p className="text-[13px] text-muted-foreground">{formatMonth(from)}</p>
         <div className="mt-6 grid grid-cols-2 gap-6 sm:grid-cols-4">
-          <Figure label="Income" value={money(income, currency)} />
-          <Figure label="Spending" value={money(expense, currency)} />
-          <Figure label="Net" value={money(income - expense, currency)} />
-          <Figure label="Entries" value={String(slice.length)} />
+          <Figure label="Income" value={money(buckets.income, currency)} />
+          <Figure label="Living" value={money(buckets.expense, currency)} />
+          <Figure label="Investing" value={money(buckets.investing, currency)} />
+          <Figure label="Savings" value={money(buckets.savings, currency)} />
         </div>
+        <p className="mt-4 text-sm text-muted-foreground">
+          Cash movement {money(buckets.cash, currency)} after living, investing, savings
+          {buckets.credit ? ` and card payments ${money(buckets.credit, currency)}` : ""}. Transfers ignored.
+        </p>
       </section>
 
       <div className="grid gap-4 lg:grid-cols-2">

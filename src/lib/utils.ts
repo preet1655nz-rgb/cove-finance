@@ -24,6 +24,24 @@ export function isoDate(d: Date) {
   return `${y}-${m}-${day}`;
 }
 
+export function addDays(iso: string, delta: number) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, m - 1, d + delta);
+  return isoDate(dt);
+}
+
+export function startOfWeek(iso = todayISO()) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  const mondayOffset = (dt.getDay() + 6) % 7;
+  dt.setDate(dt.getDate() - mondayOffset);
+  return isoDate(dt);
+}
+
+export function endOfWeek(iso = todayISO()) {
+  return addDays(startOfWeek(iso), 6);
+}
+
 export function addMonths(iso: string, delta: number) {
   const [y, m, d] = iso.split("-").map(Number);
   const dt = new Date(y, m - 1 + delta, Math.min(d, 28));

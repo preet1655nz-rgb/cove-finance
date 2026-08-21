@@ -79,3 +79,7 @@ export function categoriesFor(type: TxType) {
 export function isTransferCategory(id: string) {
   return id === "transfer-in" || id === "transfer-out";
 }
+
+export function isAllocationCategory(id: string) {
+  return id === "investing" || id === "savings" || id === "credit-card";
+}

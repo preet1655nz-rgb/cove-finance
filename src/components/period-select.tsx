@@ -2,7 +2,9 @@ import type { Period } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const OPTIONS: { id: Period; label: string }[] = [
-  { id: "this-month", label: "This month" },
+  { id: "this-week", label: "Week" },
+  { id: "fortnight", label: "Fortnight" },
+  { id: "this-month", label: "Month" },
   { id: "last-month", label: "Last month" },
   { id: "quarter", label: "3 months" },
   { id: "year", label: "Year" },

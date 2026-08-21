@@ -18,6 +18,7 @@ export type Transaction = {
   accountId?: string;
   counterparty?: string;
   transfer?: TransferLeg;
+  reviewed?: boolean;
 };
 
 export type BankAccount = {
@@ -59,6 +60,8 @@ export type RecurringBill = {
   amount: number;
   categoryId: string;
   dayOfMonth: number;
+  dueDate?: string;
+  repeat?: "monthly" | "once";
   enabled: boolean;
 };
 
@@ -82,7 +85,7 @@ export type Settings = {
   budgetAlertPct: number;
 };
 
-export type Period = "this-month" | "last-month" | "quarter" | "year" | "all";
+export type Period = "this-week" | "fortnight" | "this-month" | "last-month" | "quarter" | "year" | "all";
 
 export const CURRENCIES = [
   { code: "NZD", label: "NZ Dollar" },

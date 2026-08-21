@@ -103,7 +103,15 @@ export function CategoryDonut({
   const mounted = useMounted();
   const data = useMemo(() => {
     const map = new Map<string, number>();
-    for (const t of txs.filter((t) => t.type === "expense" && t.categoryId !== "transfer-out" && t.categoryId !== "transfer-in")) {
+    for (const t of txs.filter(
+      (t) =>
+        t.type === "expense" &&
+        t.categoryId !== "transfer-out" &&
+        t.categoryId !== "transfer-in" &&
+        t.categoryId !== "investing" &&
+        t.categoryId !== "savings" &&
+        t.categoryId !== "credit-card",
+    )) {
       map.set(t.categoryId, (map.get(t.categoryId) ?? 0) + t.amount);
     }
     return [...map.entries()]

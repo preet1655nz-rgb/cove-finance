@@ -5,12 +5,12 @@ import { interpretChat, type PendingIntent } from "./chat-brain";
 import { askGrokAboutBooks } from "./cove-ai";
 import { buildSnapshot, grokLedgerPayload } from "./cove-expert";
 import { applyRulesToTxs, classifyNote, pairTransfers } from "./intelligence";
-import { buildNotices } from "./notify";
+import { buildNotices, maybeBrowserNotify } from "./notify";
 import { spentInCategory } from "./period";
 import { buildSeed, defaultSettings } from "./seed";
 import { txFingerprint } from "./statement";
 import { isSampleLedger, LEDGER_KEY } from "./fresh-start";
-import type { BankAccount, Budget, ChatMessage, CoveFact, MemoryRule, Notice, RecurringBill, Settings, Transaction, TxType } from "./types";
+import type { BankAccount, Budget, ChatMessage, CoveFact, MemoryRule, Notice, Period, RecurringBill, Settings, Transaction, TxType } from "./types";
 import { endOfMonth, startOfMonth, todayISO, uid } from "./utils";
 
 type Draft = {
@@ -44,7 +44,7 @@ type FinanceState = {
   covePending: PendingIntent | null;
   importAccountId: string | null;
   settings: Settings;
-  period: "this-month" | "last-month" | "quarter" | "year" | "all";
+  period: Period;
   addOpen: boolean;
   settingsOpen: boolean;
   importOpen: boolean;
@@ -53,7 +53,7 @@ type FinanceState = {
   hydrated: boolean;
   focusMonth: string | null;
   setHydrated: (v: boolean) => void;
-  setPeriod: (p: FinanceState["period"]) => void;
+  setPeriod: (p: Period) => void;
   setAddOpen: (open: boolean, preset?: Partial<Draft>) => void;
   setSettingsOpen: (open: boolean) => void;
   setImportOpen: (open: boolean) => void;
@@ -236,6 +236,12 @@ export const useFinanceStore = create<FinanceState>()(
       refreshNotices: () => {
         const current = get();
         const next = buildNotices(current.transactions, current.budgets, current.bills, current.notices, current.settings.currency);
+        const prevFp = new Set(current.notices.map((n) => n.fingerprint));
+        for (const n of next) {
+          if (!prevFp.has(n.fingerprint) && n.kind === "bill") {
+            void maybeBrowserNotify(n, current.settings.browserNotifications);
+          }
+        }
         const prev = current.notices;
         if (
           next.length === prev.length &&

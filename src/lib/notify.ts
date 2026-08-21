@@ -2,29 +2,41 @@ import { getCategory } from "./categories";
 import { money } from "./format";
 import { spentInCategory } from "./period";
 import type { Budget, Notice, RecurringBill, Transaction } from "./types";
-import { endOfMonth, startOfMonth, todayISO, uid } from "./utils";
+import { addMonths, endOfMonth, isoDate, startOfMonth, todayISO, uid } from "./utils";
 
 function monthSpent(txs: Transaction[], categoryId: string) {
   const today = todayISO();
   return spentInCategory(txs, categoryId, startOfMonth(today), endOfMonth(today));
 }
 
-function nextBillDate(dayOfMonth: number) {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const last = new Date(y, m + 1, 0).getDate();
-  const day = Math.min(dayOfMonth, last);
-  let dt = new Date(y, m, day);
-  const today = new Date(y, m, now.getDate());
-  if (dt < today) dt = new Date(y, m + 1, Math.min(dayOfMonth, new Date(y, m + 2, 0).getDate()));
+export function nextBillDate(bill: Pick<RecurringBill, "dayOfMonth" | "dueDate" | "repeat">, from = todayISO()) {
+  if (bill.repeat === "once" && bill.dueDate) {
+    const [y, m, d] = bill.dueDate.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+  if (bill.dueDate && bill.dueDate >= from) {
+    const [y, m, d] = bill.dueDate.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+  const dayOfMonth = bill.dayOfMonth || (bill.dueDate ? Number(bill.dueDate.slice(8, 10)) : 1);
+  const [fy, fm, fd] = from.split("-").map(Number);
+  const today = new Date(fy, fm - 1, fd);
+  const last = new Date(fy, fm, 0).getDate();
+  let dt = new Date(fy, fm - 1, Math.min(dayOfMonth, last));
+  if (dt < today) {
+    const next = addMonths(`${fy}-${String(fm).padStart(2, "0")}-01`, 1);
+    const [ny, nm] = next.split("-").map(Number);
+    const nextLast = new Date(ny, nm, 0).getDate();
+    dt = new Date(ny, nm - 1, Math.min(dayOfMonth, nextLast));
+  }
   return dt;
 }
 
-function daysUntil(date: Date) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+export function daysUntil(date: Date, from = todayISO()) {
+  const [y, m, d] = from.split("-").map(Number);
+  const today = new Date(y, m - 1, d);
   const target = new Date(date);
+  today.setHours(0, 0, 0, 0);
   target.setHours(0, 0, 0, 0);
   return Math.round((target.getTime() - today.getTime()) / 86400000);
 }
@@ -37,6 +49,7 @@ export function buildNotices(
   currency = "NZD",
 ): Notice[] {
   const generated: Notice[] = [];
+  const today = todayISO();
 
   for (const b of budgets) {
     if (b.amount <= 0) continue;
@@ -80,23 +93,42 @@ export function buildNotices(
   }
 
   for (const bill of bills.filter((b) => b.enabled)) {
-    const due = nextBillDate(bill.dayOfMonth);
+    const due = nextBillDate(bill);
     const days = daysUntil(due);
-    if (days >= 0 && days <= 5) {
+    const dueIso = isoDate(due);
+    if (days < 0) {
       generated.push({
         id: uid(),
         kind: "bill",
-        title: days === 0 ? `${bill.name} is due today` : `${bill.name} due in ${days} day${days === 1 ? "" : "s"}`,
-        body: `${money(bill.amount, currency)} · ${getCategory(bill.categoryId).name}`,
-        href: "/budgets",
+        title: `${bill.name} is overdue`,
+        body: `${money(bill.amount, currency)} was due ${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} ago.`,
+        href: "/bills",
         read: false,
         createdAt: new Date().toISOString(),
-        fingerprint: `bill-${bill.id}-${due.toISOString().slice(0, 10)}`,
+        fingerprint: `bill-overdue-${bill.id}-${today}`,
+      });
+      continue;
+    }
+    if (days <= 3) {
+      const title =
+        days === 0
+          ? `${bill.name} is due today`
+          : days === 1
+            ? `${bill.name} is due tomorrow`
+            : `${bill.name} is due in ${days} days`;
+      generated.push({
+        id: uid(),
+        kind: "bill",
+        title,
+        body: `${money(bill.amount, currency)} · ${getCategory(bill.categoryId).name}. Reminder ${3 - days + 1} of 4.`,
+        href: "/bills",
+        read: false,
+        createdAt: new Date().toISOString(),
+        fingerprint: `bill-${bill.id}-${today}-${dueIso}`,
       });
     }
   }
 
-  const today = todayISO();
   const from = startOfMonth(today);
   const to = endOfMonth(today);
   const dining = spentInCategory(transactions, "dining", from, to);
@@ -124,7 +156,7 @@ export async function maybeBrowserNotify(notice: Notice, enabled: boolean) {
   if (!enabled || typeof window === "undefined" || !("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
   try {
-    new Notification(notice.title, { body: notice.body, silent: true });
+    new Notification(notice.title, { body: notice.body, silent: false, tag: notice.fingerprint });
   } catch {
     /* ignore */
   }

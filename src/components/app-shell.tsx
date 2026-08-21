@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { CalendarDays, FileText, LayoutGrid, PieChart, Plus, Receipt, Settings, Wallet } from "lucide-react";
+import { Bell, CalendarDays, FileText, LayoutGrid, ListChecks, PieChart, Plus, Receipt, Settings, Wallet } from "lucide-react";
 import { useEffect } from "react";
 import { NotificationCenter } from "@/components/notification-center";
 import { QuickAdd } from "@/components/quick-add";
@@ -15,6 +15,8 @@ const NAV = [
   { to: "/", label: "Overview", short: "Home", icon: LayoutGrid },
   { to: "/calendar", label: "Calendar", short: "Cal", icon: CalendarDays },
   { to: "/activity", label: "Activity", short: "Log", icon: Receipt },
+  { to: "/reconcile", label: "Reconcile", short: "Match", icon: ListChecks },
+  { to: "/bills", label: "Bills", short: "Bills", icon: Bell },
   { to: "/budgets", label: "Budgets", short: "Caps", icon: Wallet },
   { to: "/insights", label: "Insights", short: "Stats", icon: PieChart },
   { to: "/reports", label: "Reports", short: "PDF", icon: FileText },
@@ -70,6 +72,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [setAddOpen]);
+
+  useEffect(() => {
+    function ping() {
+      useFinanceStore.getState().refreshNotices();
+    }
+    function onVis() {
+      if (document.visibilityState === "visible") ping();
+    }
+    document.addEventListener("visibilitychange", onVis);
+    const id = window.setInterval(ping, 60 * 60 * 1000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.clearInterval(id);
+    };
+  }, []);
 
   return (
     <div className="min-h-dvh bg-background">
@@ -148,7 +165,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 backdrop-blur-md lg:hidden">
-        <div className="mx-auto grid max-w-lg grid-cols-6 px-0.5 pb-[env(safe-area-inset-bottom)]">
+        <div className="mx-auto flex max-w-lg gap-0 overflow-x-auto px-0.5 pb-[env(safe-area-inset-bottom)]">
           {NAV.map((item) => {
             const Icon = item.icon;
             const active = isActive(pathname, item.to);
@@ -158,7 +175,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 to={item.to}
                 aria-label={item.label}
                 className={cn(
-                  "flex min-h-14 flex-col items-center justify-center gap-1 px-0.5 text-[10px] font-medium",
+                  "flex min-h-14 min-w-[4.5rem] flex-1 flex-col items-center justify-center gap-1 px-1 text-[10px] font-medium",
                   active ? "text-foreground" : "text-muted-foreground",
                 )}
               >
