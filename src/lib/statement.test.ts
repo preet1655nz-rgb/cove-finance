@@ -78,11 +78,13 @@ test("parseDate prefers DMY and accepts ISO", () => {
   assert.equal(parseDate("15/08/2026", true), "2026-08-15");
   assert.equal(parseDate("08/15/2026", false), "2026-08-15");
   assert.equal(parseDate("2026-08-15", true), "2026-08-15");
+  assert.equal(parseDate("2026/08/15", true), "2026-08-15");
   assert.equal(parseDate("20260815", true), "2026-08-15");
   assert.equal(parseDate("15 Aug 2026", true), "2026-08-15");
   assert.equal(parseDate("Aug 15, 2026", true), "2026-08-15");
   assert.equal(parseDate("26 Jun", true, 2026), "2026-06-26");
   assert.equal(parseDate("01 Jul", true, 2026), "2026-07-01");
+  assert.equal(parseDate("20-08-2026", true), "2026-08-20");
   assert.equal(parseDate("32/13/2026", true), null);
 });
 
@@ -116,6 +118,31 @@ test("real household month across NZ and US bank exports", () => {
   assertGold(parseBankStatement(readFileSync(join(fixtures, "asb.csv"), "utf8"), "asb.csv"), "ASB");
   assertGold(parseBankStatement(readFileSync(join(fixtures, "kiwibank.csv"), "utf8"), "kiwibank.csv"), "Kiwibank");
   assertGold(parseBankStatement(readFileSync(join(fixtures, "chase.csv"), "utf8"), "chase.csv"), "Chase");
+});
+
+test("published NZ bank CSV layouts from internet banking", () => {
+  const cases = [
+    ["anz-official.csv", "ANZ official", "anz"],
+    ["asb-fastnet.csv", "ASB FastNet Classic", "asb"],
+    ["westpac-nz.csv", "Westpac NZ", "westpac"],
+    ["westpac-narration.csv", "Westpac narration", "westpac"],
+    ["bnz.csv", "BNZ", "bnz"],
+    ["bnz-extended.csv", "BNZ extended", "bnz"],
+    ["kiwibank-full.csv", "Kiwibank full", "kiwibank"],
+    ["tsb.csv", "TSB", "csv"],
+    ["national-bank.csv", "National Bank", "national-bank"],
+  ];
+  for (const [file, label, bank] of cases) {
+    const result = parseBankStatement(readFileSync(join(fixtures, file), "utf8"), file);
+    assertGold(result, label);
+    assert.ok(result.format.startsWith(bank), `${label} format ${result.format} should start with ${bank}`);
+    assert.equal(result.rows.some((r) => /opening balance|avail bal|ledger bal|unique id|20260820/i.test(r.note)), false, `${label} leaked metadata into notes`);
+  }
+});
+
+test("ASB-style PDF text uses dates and amounts", () => {
+  const result = parseBankStatement(readFileSync(join(fixtures, "asb-pdf.txt"), "utf8"), "asb-statement.pdf");
+  assertGold(result, "ASB PDF", 20);
 });
 
 test("OFX household snippet keeps salary in and countdown out", () => {

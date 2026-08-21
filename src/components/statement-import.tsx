@@ -13,6 +13,7 @@ import {
 import { money } from "@/lib/format";
 import {
   SAMPLE_STATEMENT,
+  NZ_BANK_SAMPLES,
   applyDuplicates,
   categoriesForSelect,
   parseBankStatement,
@@ -80,15 +81,15 @@ export function StatementImport() {
     applyParse(parseBankStatement(SAMPLE_STATEMENT, "sample-statement.csv"));
   }
 
-  async function onAnzSample() {
+  async function onBankSample(file: string) {
     setBusy(true);
     try {
-      const res = await fetch("/sample-anz-go.csv");
+      const res = await fetch(file);
       if (!res.ok) throw new Error("missing");
       const text = await res.text();
-      applyParse(parseBankStatement(text, "anz-go.csv"));
+      applyParse(parseBankStatement(text, file.split("/").pop() ?? "sample.csv"));
     } catch {
-      setError("Could not load the ANZ Go sample.");
+      setError("Could not load that sample statement.");
     } finally {
       setBusy(false);
     }
@@ -163,7 +164,7 @@ export function StatementImport() {
         <DialogHeader>
           <DialogTitle>Upload statement</DialogTitle>
           <DialogDescription>
-            PDF, CSV, OFX or QIF from your bank. Cove reads withdrawals and deposits, then marks each row as income or expense.
+            PDF, CSV, OFX or QIF from any New Zealand bank. Cove reads income and expenses automatically.
           </DialogDescription>
         </DialogHeader>
 
@@ -196,29 +197,27 @@ export function StatementImport() {
               )}
             >
               <Upload className="size-5 text-muted-foreground" strokeWidth={1.75} />
-              <p className="text-sm font-medium">{busy ? "Reading…" : "Drop a bank PDF here"}</p>
+              <p className="text-sm font-medium">{busy ? "Reading…" : "Drop a bank statement here"}</p>
               <p className="max-w-xs text-[12px] text-muted-foreground">
-                ANZ Go statements, CSV, OFX or QIF. Withdrawals become expenses, deposits become income.
+                ANZ, ASB, Westpac, BNZ, Kiwibank, TSB — CSV or PDF. Withdrawals become expenses, deposits become income.
               </p>
             </button>
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={onSample}>
-                Try a sample
-              </Button>
-              <Button variant="outline" onClick={() => void onAnzSample()}>
-                Try ANZ Go
-              </Button>
-              <Button variant="outline" onClick={() => void onAnzPdfSample()}>
-                Try ANZ PDF
-              </Button>
-              <a
-                href="/sample-anz-go.csv"
-                download
-                className="inline-flex h-11 items-center justify-center rounded-md px-4 text-sm text-muted-foreground hover:text-foreground"
-              >
-                Download CSV
-              </a>
+            <div>
+              <p className="mb-2 text-[12px] text-muted-foreground">Try a real NZ bank export</p>
+              <div className="flex flex-wrap gap-2">
+                {NZ_BANK_SAMPLES.map((s) => (
+                  <Button key={s.id} variant="outline" onClick={() => void onBankSample(s.file)}>
+                    {s.label}
+                  </Button>
+                ))}
+                <Button variant="outline" onClick={() => void onAnzPdfSample()}>
+                  ANZ PDF
+                </Button>
+                <Button variant="ghost" onClick={onSample}>
+                  Simple sample
+                </Button>
+              </div>
             </div>
           </div>
         ) : (

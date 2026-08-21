@@ -22,18 +22,18 @@ export type ParseResult = {
 };
 
 const SKIP_NOTE =
-  /\b(opening balance|closing balance|brought forward|carried forward|balance (brought|carried)|opening bal|closing bal|total balance|account balance|totals at end|totals at end of page)\b/i;
+  /\b(opening balance|closing balance|brought forward|carried forward|balance (brought|carried)|opening bal|closing bal|total balance|account balance|totals at end|totals at end of page|avail(?:able)? bal(?:ance)?|ledger bal(?:ance)?|balance brought forward)\b/i;
 
-const DATE_H = /\b(date|posted|posting|processed|value date|dtposted|txn date|effective|transaction date)\b/i;
+const DATE_H = /\b(date|posted|posting|processed|value date|dtposted|txn date|effective|transaction date|tran date)\b/i;
 const AMOUNT_H = /^(amount|value|sum|aud|nzd|usd|gbp|eur|cad|transaction amount|trnamt|txn amount)$/i;
-const DEBIT_H = /^(debit|withdrawal|withdrawals|money out|paid out|payment amount|spent|charge|dr|outflow|debits)(\s+amount)?$/i;
-const CREDIT_H = /^(credit|deposit|deposits|money in|paid in|receipts|cr|inflow|credits)(\s+amount)?$/i;
-const DESC_H = /\b(description|details|particulars|memo|payee|narrative|merchant|other party|reference|contra|name|tp name|libelle|label|beneficiary|transaction type)\b/i;
-const TYPE_H = /^(type|tran(saction)? type|dr\/cr|debit\/credit|txn type|source code|payment type)$/i;
-const IGNORE_H = /^(balance|running balance|account( number)?|unique id|cheque|check number|fitid|processed date|value date)$/i;
+const DESC_H = /\b(description|details|particulars|memo|payee|narration|narrative|merchant|other party|reference\d*|contra|name|tp name|op name|libelle|label|beneficiary|transaction type|category)\b/i;
+const TYPE_H = /^(type|tran(saction)? type|dr\/cr|debit\/credit|txn type|source code( \(payment type\))?|payment type)$/i;
+const IGNORE_H =
+  /^(balance|running balance|account( number)?|bank account|unique id|cheque( number)?|check number|fitid|processed date|value date|foreign ?currency ?amount|conversion ?charge|serial|batch( number)?|originating bank.*|this party account|other party account|op bank account( number)?|analysis code|tpn|tp ref|tp part|tp code|op ref|op part|op code|op bank account number|avail bal(ance)?|ledger bal(ance)?|created date.*|from date|to date)$/i;
 
 const INCOME_TYPE = /\b(credit|deposit|salary|salaire|payroll|interest|dividend|refund|direct credit|d\/c|\bdc\b|dep|inward|payment received|cr|wage\/salary|credit transfer)\b/i;
-const EXPENSE_TYPE = /\b(debit|pos|eftpos|visa|mastercard|atm|payment|bill|direct debit|d\/d|\bdd\b|withdrawal|fee|purchase|dr|outward|transfer out|\bbp\b|\bap\b|\bvt\b|\bep\b)\b/i;
+const EXPENSE_TYPE = /\b(debit|pos|eftpos|visa|mastercard|atm|payment|bill|direct debit|d\/d|\bdd\b|withdrawal|fee|purchase|dr|outward|transfer out|\bbp\b|\bap\b|\bvt\b|\bep\b|\bat\b|bill payment|automatic payment)\b/i;
+
 
 const RULES: { re: RegExp; id: string }[] = [
   { re: /\b(salary|salaire|wages?|payroll|paye|direct dep(osit)?|employer)\b/i, id: "salary" },
@@ -72,6 +72,15 @@ Direct credit,NORTH STUDIO,INVOICE 441,,,960.00,18/08/2026,18/08/2026
 Visa purchase,UNIQLO NEW MARKET,,,,-48.00,11/08/2026,11/08/2026
 Opening balance,,,,,,12450.00,01/08/2026,
 `;
+
+export const NZ_BANK_SAMPLES: { id: string; label: string; file: string }[] = [
+  { id: "anz", label: "ANZ", file: "/samples/anz.csv" },
+  { id: "asb", label: "ASB", file: "/samples/asb.csv" },
+  { id: "westpac", label: "Westpac", file: "/samples/westpac.csv" },
+  { id: "bnz", label: "BNZ", file: "/samples/bnz.csv" },
+  { id: "kiwibank", label: "Kiwibank", file: "/samples/kiwibank.csv" },
+];
+
 
 export function txFingerprint(date: string, amount: number, note: string) {
   const n = note
@@ -154,6 +163,10 @@ function parseUnsafe(input: string, filename: string): ParseResult {
     if (anz.length >= 3) {
       return finalize(anz, "anz-ledger", 0, ["Read as an ANZ-style statement (withdrawals and deposits)."]);
     }
+    const generic = parseGenericLedger(text, yearHint);
+    if (generic.length >= 3) {
+      return finalize(generic, "pdf-ledger", 0, ["Read as a statement PDF (dates and amounts)."]);
+    }
   }
 
   const csv = parseCsv(text, filename);
@@ -161,6 +174,10 @@ function parseUnsafe(input: string, filename: string): ParseResult {
   const anz = parseAnzLedger(text, yearHint);
   if (anz.length >= 3) {
     return finalize(anz, "anz-ledger", 0, ["Read as an ANZ-style statement (withdrawals and deposits)."]);
+  }
+  const generic = parseGenericLedger(text, yearHint);
+  if (generic.length >= 3) {
+    return finalize(generic, "pdf-ledger", 0, ["Read as a statement PDF (dates and amounts)."]);
   }
   return csv;
 }
@@ -346,6 +363,56 @@ function parseAnzLedger(text: string, yearHint: number): Omit<StatementDraft, "k
   return out;
 }
 
+function parseGenericLedger(text: string, yearHint: number): Omit<StatementDraft, "key" | "duplicate" | "included">[] {
+  const lines = text
+    .split("\n")
+    .map((l) => l.replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ").trim())
+    .filter(Boolean);
+  const out: Omit<StatementDraft, "key" | "duplicate" | "included">[] = [];
+  for (const line of lines) {
+    if (SKIP_NOTE.test(line) || /^(date\b|transaction|page |totals|statement |account |opening|closing)/i.test(line)) continue;
+    let date: string | null = null;
+    let rest = line;
+    const isoD = line.match(/^(\d{4}[/.\-]\d{1,2}[/.\-]\d{1,2})\s+(.*)$/);
+    const dmy = line.match(/^(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})\s+(.*)$/);
+    const mon = line.match(/^(\d{1,2}\s+[A-Za-z]{3}(?:\s+\d{2,4})?)\s+(.*)$/);
+    if (isoD) {
+      date = parseDate(isoD[1], true, yearHint);
+      rest = isoD[2];
+    } else if (dmy) {
+      date = parseDate(dmy[1], true, yearHint);
+      rest = dmy[2];
+    } else if (mon) {
+      date = parseDate(mon[1], true, yearHint);
+      rest = mon[2];
+    } else continue;
+    if (!date) continue;
+    const moneyMatches = [...rest.matchAll(/\$?(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2}(?:\s*(?:CR|DR))?/gi)].map((m) => m[0]);
+    if (!moneyMatches.length) continue;
+    const amountStr = moneyMatches.length >= 2 ? moneyMatches[moneyMatches.length - 2] : moneyMatches[0];
+    const amount = parseAmount(amountStr.replace(/\s*(CR|DR)\s*$/i, ""));
+    if (amount == null || amount === 0) continue;
+    let note = rest;
+    for (const am of moneyMatches) note = note.split(am).join("");
+    note = note.replace(/\s+/g, " ").trim();
+    if (SKIP_NOTE.test(note)) continue;
+    const cr = /\bCR\b/i.test(amountStr);
+    const dr = /\bDR\b/i.test(amountStr);
+    let type: TxType = "expense";
+    if (cr && !dr) type = "income";
+    else if (amount < 0) type = "expense";
+    else if (INCOME_TYPE.test(note) || isIncomeNote(note)) type = "income";
+    out.push({
+      date,
+      amount: Math.abs(amount),
+      type,
+      note,
+      categoryId: categorize(note, type),
+    });
+  }
+  return out;
+}
+
 function parseCsv(text: string, _filename: string): ParseResult {
   const delimiter = detectDelimiter(text);
   const table = splitCsv(text, delimiter).filter((r) => r.some((c) => c.trim()));
@@ -383,7 +450,11 @@ function parseCsv(text: string, _filename: string): ParseResult {
     const amountRaw = cols.amount != null ? parseAmount(cell(row, cols.amount)) : null;
     const debit = cols.debit != null ? parseAmount(cell(row, cols.debit)) : null;
     const credit = cols.credit != null ? parseAmount(cell(row, cols.credit)) : null;
-    if (SKIP_NOTE.test(note) || SKIP_NOTE.test(dateRaw)) {
+    if (
+      SKIP_NOTE.test(note) ||
+      SKIP_NOTE.test(dateRaw) ||
+      /^(from|to|created|avail|ledger|bank|account)\b/i.test(dateRaw)
+    ) {
       skipped += 1;
       continue;
     }
@@ -418,11 +489,15 @@ function parseCsv(text: string, _filename: string): ParseResult {
     });
   }
 
+  const bank = fingerprintBank(headers);
   const warnings: string[] = [];
+  if (bank && BANK_LABEL[bank]) {
+    warnings.push(`Read as ${BANK_LABEL[bank]}.`);
+  }
   if (style === "unsigned") {
     warnings.push("Amounts had no minus signs, so income was detected from words like salary or deposit.");
   }
-  return finalize(raw, `csv-${style}`, skipped, warnings);
+  return finalize(raw, bank ? `${bank}-${style}` : `csv-${style}`, skipped, warnings);
 }
 
 function resolveAmountAndType(
@@ -452,17 +527,74 @@ function isIncomeNote(note: string) {
 
 function headerScore(cells: string[]) {
   let s = 0;
-  const joined = cells.map((c) => foldHeader(c)).join(" | ");
+  const folded = cells.map((c) => foldHeader(c));
+  const joined = folded.join(" | ");
   if (DATE_H.test(joined)) s += 4;
-  if (AMOUNT_H.test(joined) || DEBIT_H.test(joined) || CREDIT_H.test(joined) || /\bamount\b/.test(joined)) s += 4;
+  if (folded.some((n) => AMOUNT_H.test(n) || isDebitCol(n) || isCreditCol(n)) || /\bamount\b/.test(joined)) s += 4;
   if (DESC_H.test(joined)) s += 2;
-  if (TYPE_H.test(joined)) s += 1;
+  if (folded.some((n) => TYPE_H.test(n))) s += 1;
   for (const c of cells) {
     if (/^\d{1,4}[/-]\d{1,2}[/-]\d{1,4}$/.test(c.trim())) s -= 3;
     if (/^-?\$?\d[\d,]*\.\d{2}$/.test(c.trim())) s -= 2;
   }
   return s;
 }
+
+function isDebitCol(n: string) {
+  return (
+    /amount\s*\(\s*debit\s*\)/.test(n) ||
+    /^(debit|withdrawal|withdrawals|money out|paid out|outflow|debits)(\s+amount)?$/.test(n) ||
+    /^dr(\s+amount)?$/.test(n)
+  );
+}
+
+function isCreditCol(n: string) {
+  return (
+    /amount\s*\(\s*credit\s*\)/.test(n) ||
+    /^(credit|deposit|deposits|money in|paid in|receipts|inflow|credits)(\s+amount)?$/.test(n) ||
+    /^cr(\s+amount)?$/.test(n)
+  );
+}
+
+function fingerprintBank(headers: string[]): string | null {
+  const h = headers.map(foldHeader);
+  const set = new Set(h);
+  const blob = h.join(" | ");
+  if (set.has("unique id") && set.has("tran type") && set.has("payee")) return "asb";
+  if (set.has("foreigncurrencyamount") || set.has("conversioncharge")) return "anz";
+  if (set.has("type") && set.has("details") && set.has("particulars") && set.has("amount") && set.has("date")) return "anz";
+  if (set.has("withdrawals") && set.has("deposits")) return "anz";
+  if (set.has("other party") && (set.has("analysis code") || set.has("particulars"))) return "westpac";
+  if (set.has("debit amount") && set.has("credit amount")) return "westpac";
+  if (set.has("narration")) return "westpac";
+  if (
+    blob.includes("source code") ||
+    set.has("amount (credit)") ||
+    set.has("amount (debit)") ||
+    set.has("tp name") ||
+    set.has("op name") ||
+    set.has("memo/description")
+  ) {
+    return "kiwibank";
+  }
+  if (set.has("this party account") || set.has("originating bank/branch")) return "bnz";
+  if (set.has("account") && set.has("description") && set.has("amount") && set.has("balance") && set.has("date") && h.length <= 6) {
+    return "bnz";
+  }
+  if (set.has("reference1") && set.has("reference2")) return "national-bank";
+  return null;
+}
+
+const BANK_LABEL: Record<string, string> = {
+  anz: "ANZ",
+  asb: "ASB",
+  westpac: "Westpac",
+  kiwibank: "Kiwibank",
+  bnz: "BNZ",
+  "national-bank": "National Bank",
+  tsb: "TSB",
+};
+
 
 function foldHeader(s: string) {
   return s
@@ -480,11 +612,11 @@ function mapColumns(headers: string[], sample: string[][]) {
     if (IGNORE_H.test(n) && !DATE_H.test(n)) return;
     if (cols.date == null && DATE_H.test(n) && !/processed|value date/i.test(n)) cols.date = i;
     else if (cols.date == null && DATE_H.test(n)) cols.date = i;
-    if (DEBIT_H.test(n)) cols.debit = i;
-    else if (CREDIT_H.test(n)) cols.credit = i;
+    if (isDebitCol(n)) cols.debit = i;
+    else if (isCreditCol(n)) cols.credit = i;
     else if (AMOUNT_H.test(n) || /^amount$/i.test(n)) cols.amount = i;
     if (TYPE_H.test(n)) cols.type = i;
-    if (DESC_H.test(n)) cols.desc.push(i);
+    if (DESC_H.test(n) && !IGNORE_H.test(n) && !isDebitCol(n) && !isCreditCol(n) && !AMOUNT_H.test(n)) cols.desc.push(i);
   });
   if (cols.date == null || (cols.amount == null && cols.debit == null && cols.credit == null)) {
     inferColumns(cols, sample, headers.length || guessWidth(sample), headers);
@@ -492,7 +624,8 @@ function mapColumns(headers: string[], sample: string[][]) {
   if (!cols.desc.length && headers.length) {
     headers.forEach((_, i) => {
       if (i !== cols.date && i !== cols.amount && i !== cols.debit && i !== cols.credit && i !== cols.type) {
-        cols.desc.push(i);
+        const n = foldHeader(headers[i] ?? "");
+        if (!IGNORE_H.test(n)) cols.desc.push(i);
       }
     });
   }
@@ -695,7 +828,7 @@ export function parseAmount(raw: string): number | null {
 export function parseDate(raw: string, preferDMY: boolean, yearHint?: number): string | null {
   if (!raw) return null;
   const s = String(raw).trim();
-  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  let m = s.match(/^(\d{4})[/.\-](\d{1,2})[/.\-](\d{1,2})/);
   if (m) return iso(m[1], m[2], m[3]);
   m = s.match(/^(\d{4})(\d{2})(\d{2})(?:\d{2,6})?$/);
   if (m) return iso(m[1], m[2], m[3]);
