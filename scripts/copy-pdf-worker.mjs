@@ -5,6 +5,6 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 mkdirSync(join(root, "public"), { recursive: true });
 copyFileSync(
-  join(root, "node_modules/pdfjs-dist/build/pdf.worker.min.mjs"),
+  join(root, "node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs"),
   join(root, "public/pdf.worker.min.mjs"),
 );

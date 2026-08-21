@@ -343,6 +343,26 @@ test("ANZ Go ledger text from a PDF extract matches the same totals", () => {
   assertAnzGo(result, "ANZ Go PDF text");
 });
 
+test("real ANZ Go pages 2–3 keep page totals and ignore the footer", () => {
+  const text = readFileSync(join(fixtures, "anz-go-pages-2-3.txt"), "utf8");
+  const result = parseBankStatement(text, "State.pdf");
+  assert.equal(result.ok, true, result.error);
+  assert.equal(result.format, "anz-ledger");
+  assert.equal(result.rows.length, 78);
+  const income = result.rows.filter((r) => r.type === "income").reduce((s, r) => s + r.amount, 0);
+  const expense = result.rows.filter((r) => r.type === "expense").reduce((s, r) => s + r.amount, 0);
+  assert.equal(Number(income.toFixed(2)), 12273.11);
+  assert.equal(Number(expense.toFixed(2)), 11918.35);
+  const last = result.rows.filter((r) => r.date === "2026-08-12" && /9554-0104-1146-0702/.test(r.note));
+  assert.equal(last.length, 1);
+  assert.equal(last[0]!.amount, 200);
+  assert.equal(last[0]!.type, "expense");
+  assert.equal(
+    result.rows.some((r) => /available credit|totals at end/i.test(r.note)),
+    false,
+  );
+});
+
 function csvToAnzLedger(csv: string) {
   const lines = csv.trim().split("\n");
   const out = [

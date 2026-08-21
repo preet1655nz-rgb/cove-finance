@@ -200,7 +200,7 @@ export function StatementImport() {
         <input
           ref={inputRef}
           type="file"
-          accept=".csv,.ofx,.qfx,.qif,.txt,.pdf,text/csv,application/pdf,application/ofx,text/plain"
+          accept=".pdf,.csv,.ofx,.qfx,.qif,.txt,application/pdf,text/csv,text/plain"
           className="sr-only"
           onChange={(e) => void onFile(e.target.files?.[0])}
         />

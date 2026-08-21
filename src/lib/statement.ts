@@ -81,15 +81,19 @@ export function parseBankStatement(input: string, filename = ""): ParseResult {
 
 export async function readStatementFile(file: File, password?: string): Promise<ParseResult> {
   try {
+    if (file.size < 32) {
+      return fail("That file looks empty. If it is in iCloud or Files, wait for it to finish downloading and try again.");
+    }
     if (file.size > 12_000_000) {
       return fail("That file is too large. Export a CSV or PDF of a single month instead.");
     }
     const buf = await file.arrayBuffer();
     const kind = sniffFile(buf);
-    if (kind === "image") {
+    const namedPdf = /\.pdf$/i.test(file.name || "") || file.type === "application/pdf";
+    if (kind === "image" && !namedPdf) {
       return fail("That looks like a photo. Upload the PDF or CSV your bank exported, not a screenshot.");
     }
-    if (kind === "pdf") {
+    if (kind === "pdf" || (namedPdf && kind !== "image")) {
       try {
         const { extractPdfText, PdfOpenError } = await import("./pdf-statement");
         const text = await Promise.race([
@@ -120,6 +124,9 @@ export async function readStatementFile(file: File, password?: string): Promise<
         return fail("That PDF could not be read. Try another export, or download the CSV from internet banking.");
       }
     }
+    if (kind === "image") {
+      return fail("That looks like a photo. Upload the PDF or CSV your bank exported, not a screenshot.");
+    }
     const head = new Uint8Array(buf.slice(0, 8));
     if (head.some((b, i) => i < 4 && b === 0)) {
       return fail("That looks like a spreadsheet workbook. Save as CSV and upload again.");
@@ -138,7 +145,7 @@ function isPasswordish(err: unknown) {
 }
 
 function sniffFile(buf: ArrayBuffer): "pdf" | "image" | "other" {
-  const bytes = new Uint8Array(buf.slice(0, 1024));
+  const bytes = new Uint8Array(buf.slice(0, 4096));
   if (bytes[0] === 0xff && bytes[1] === 0xd8) return "image";
   if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "image";
   if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return "image";
@@ -339,19 +346,18 @@ function parseAnzLedger(text: string, yearHint: number): Omit<StatementDraft, "k
     .split("\n")
     .map((l) => l.replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ").trim())
     .filter(Boolean);
+  const skipMerge =
+    /^(totals|page |go -|date\b|transaction type|withdrawals|deposits|balance|ap automatic|bp bill|dc direct|dd direct|vt visa|ep eftpos|text$|your available|payment dates)/i;
   const merged: string[] = [];
   for (const line of lines) {
     if (ANZ_DATE.test(line)) merged.push(line);
-    else if (
-      merged.length &&
-      !/^(totals|page |go -|date\b|transaction type|withdrawals|deposits|balance|ap automatic|bp bill|dc direct|dd direct|vt visa|ep eftpos)/i.test(line)
-    ) {
+    else if (merged.length && !skipMerge.test(line) && !/available credit|closing date of this statement/i.test(line)) {
       merged[merged.length - 1] += ` ${line}`;
     }
   }
   const out: Omit<StatementDraft, "key" | "duplicate" | "included">[] = [];
   for (const line of merged) {
-    if (SKIP_NOTE.test(line) || /totals at end/i.test(line)) continue;
+    if (SKIP_NOTE.test(line) || /totals at end|available credit/i.test(line)) continue;
     const dm = line.match(
       /^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[,\s]+(.*)$/i,
     );
@@ -359,12 +365,20 @@ function parseAnzLedger(text: string, yearHint: number): Omit<StatementDraft, "k
     const date = parseDate(`${dm[1]} ${dm[2]} ${yearHint}`, true, yearHint);
     if (!date) continue;
     let rest = dm[3].replace(/^,+/, "").trim();
+    rest = rest
+      .replace(/\bYour available credit\b[\s\S]*$/i, "")
+      .replace(/\bTotals at end[\s\S]*$/i, "")
+      .replace(/\bPayment dates displayed[\s\S]*$/i, "")
+      .replace(/\bText(?:\s+text)+\b[\s\S]*$/i, "")
+      .trim();
     const tm = rest.match(ANZ_CODE);
     const code = tm ? tm[1].toUpperCase() : "";
     if (tm) rest = rest.slice(tm[0].length).trim();
     const moneyMatches = [...rest.matchAll(/\$?(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2}/g)].map((m) => m[0]);
     if (!moneyMatches.length) continue;
-    const amountStr = moneyMatches.length >= 2 ? moneyMatches[moneyMatches.length - 2] : moneyMatches[0];
+    // ANZ Go: first money figure is the withdrawal/deposit; later figures are
+    // running balance (and sometimes footer totals if a page trailer leaked in).
+    const amountStr = moneyMatches[0];
     const amount = parseAmount(amountStr);
     if (amount == null || amount === 0) continue;
     let note = rest;
