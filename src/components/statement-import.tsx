@@ -35,6 +35,9 @@ export function StatementImport() {
   const [rows, setRows] = useState<StatementDraft[]>([]);
   const [skipped, setSkipped] = useState(0);
   const [drag, setDrag] = useState(false);
+  const [heldFile, setHeldFile] = useState<File | null>(null);
+  const [password, setPassword] = useState("");
+  const [needsPassword, setNeedsPassword] = useState(false);
 
   function reset() {
     setRows([]);
@@ -42,6 +45,9 @@ export function StatementImport() {
     setWarnings([]);
     setSkipped(0);
     setBusy(false);
+    setHeldFile(null);
+    setPassword("");
+    setNeedsPassword(false);
   }
 
   function applyParse(result: ReturnType<typeof parseBankStatement>) {
@@ -50,20 +56,23 @@ export function StatementImport() {
       setError(result.error ?? "Could not read that statement.");
       setWarnings([]);
       setSkipped(0);
+      setNeedsPassword(Boolean(result.needsPassword));
       return;
     }
     setError(null);
+    setNeedsPassword(false);
     setWarnings(result.warnings);
     setSkipped(result.skipped);
     setRows(applyDuplicates(result.rows, useFinanceStore.getState().transactions));
   }
 
-  async function onFile(file: File | undefined) {
+  async function onFile(file: File | undefined, pwd?: string) {
     if (!file) return;
+    setHeldFile(file);
     setBusy(true);
     setError(null);
     try {
-      const result = await readStatementFile(file);
+      const result = await readStatementFile(file, pwd ?? password);
       applyParse(result);
     } catch (err) {
       console.error(err);
@@ -201,6 +210,27 @@ export function StatementImport() {
               </p>
             </button>
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            {needsPassword && heldFile ? (
+              <form
+                className="flex flex-col gap-2 sm:flex-row"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void onFile(heldFile, password);
+                }}
+              >
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="PDF password"
+                  autoComplete="off"
+                  className="h-11 flex-1 rounded-md bg-card px-3 text-sm shadow-card outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                />
+                <Button type="submit" disabled={busy || !password}>
+                  Unlock
+                </Button>
+              </form>
+            ) : null}
             <div>
               <p className="mb-2 text-[12px] text-muted-foreground">Try a real NZ bank export</p>
               <div className="flex flex-wrap gap-2">

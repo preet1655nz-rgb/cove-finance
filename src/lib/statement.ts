@@ -19,6 +19,7 @@ export type ParseResult = {
   skipped: number;
   warnings: string[];
   error?: string;
+  needsPassword?: boolean;
 };
 
 const SKIP_NOTE =
@@ -99,39 +100,80 @@ export function parseBankStatement(input: string, filename = ""): ParseResult {
   }
 }
 
-export async function readStatementFile(file: File): Promise<ParseResult> {
+export async function readStatementFile(file: File, password?: string): Promise<ParseResult> {
   try {
-    if (file.size > 6_000_000) {
+    if (file.size > 12_000_000) {
       return fail("That file is too large. Export a CSV or PDF of a single month instead.");
     }
     const buf = await file.arrayBuffer();
-    const head = new Uint8Array(buf.slice(0, 8));
-    const sig = String.fromCharCode(...head);
-    if (sig.startsWith("%PDF")) {
-      const { extractPdfText } = await import("./pdf-statement");
-      const text = await Promise.race([
-        extractPdfText(buf),
-        new Promise<string>((_, reject) => {
-          setTimeout(() => reject(new Error("pdf-timeout")), 20000);
-        }),
-      ]);
-      if (!text.trim()) {
-        return fail("That PDF had no readable text. A bank statement PDF (not a photo) works best.");
-      }
-      return parseBankStatement(text, file.name || "statement.pdf");
+    const kind = sniffFile(buf);
+    if (kind === "image") {
+      return fail("That looks like a photo. Upload the PDF or CSV your bank exported, not a screenshot.");
     }
+    if (kind === "pdf") {
+      try {
+        const { extractPdfText, PdfOpenError } = await import("./pdf-statement");
+        const text = await Promise.race([
+          extractPdfText(buf, password),
+          new Promise<string>((_, reject) => {
+            setTimeout(() => reject(new PdfOpenError("That PDF took too long to read. Try a one-month CSV export.", "timeout")), 45000);
+          }),
+        ]);
+        const parsed = parseBankStatement(text, file.name || "statement.pdf");
+        if (!parsed.ok) {
+          return fail(
+            parsed.error ??
+              "No dates and amounts were found in that PDF. Download the CSV from internet banking instead.",
+          );
+        }
+        return parsed;
+      } catch (err) {
+        const { PdfOpenError } = await import("./pdf-statement");
+        if (err instanceof PdfOpenError) {
+          return fail(err.message, { needsPassword: err.kind === "password" });
+        }
+        if (isPasswordish(err)) {
+          return fail("This PDF is locked. Enter the password from your bank (often your date of birth or customer number).", {
+            needsPassword: true,
+          });
+        }
+        console.error("PDF read failed", err);
+        return fail("That PDF could not be read. Try another export, or download the CSV from internet banking.");
+      }
+    }
+    const head = new Uint8Array(buf.slice(0, 8));
     if (head.some((b, i) => i < 4 && b === 0)) {
       return fail("That looks like a spreadsheet workbook. Save as CSV and upload again.");
     }
     const text = new TextDecoder("utf-8", { fatal: false }).decode(buf);
     return parseBankStatement(text, file.name);
-  } catch {
-    return fail("That file could not be opened. Try another export from your bank.");
+  } catch (err) {
+    console.error("Statement read failed", err);
+    return fail("That file could not be opened. Try a PDF or CSV export from your bank.");
   }
 }
 
-function fail(error: string): ParseResult {
-  return { ok: false, format: "unknown", rows: [], skipped: 0, warnings: [], error };
+function isPasswordish(err: unknown) {
+  const e = err as { name?: string; message?: string } | null;
+  return Boolean(e && (e.name === "PasswordException" || /password/i.test(String(e.message ?? ""))));
+}
+
+function sniffFile(buf: ArrayBuffer): "pdf" | "image" | "other" {
+  const bytes = new Uint8Array(buf.slice(0, 1024));
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) return "image";
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "image";
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return "image";
+  const latin = Array.from(bytes)
+    .map((b) => String.fromCharCode(b))
+    .join("");
+  if (latin.includes("%PDF")) return "pdf";
+  if (latin.includes("ftypheic") || latin.includes("ftypheif") || latin.includes("ftypmif1")) return "image";
+  if (latin.includes("WEBP")) return "image";
+  return "other";
+}
+
+function fail(error: string, extra: Partial<ParseResult> = {}): ParseResult {
+  return { ok: false, format: "unknown", rows: [], skipped: 0, warnings: [], error, ...extra };
 }
 
 function parseUnsafe(input: string, filename: string): ParseResult {
@@ -160,11 +202,11 @@ function parseUnsafe(input: string, filename: string): ParseResult {
   const looksPdf = fname.endsWith(".pdf") || looksLikeAnzLedger(text);
   if (looksPdf) {
     const anz = parseAnzLedger(text, yearHint);
-    if (anz.length >= 3) {
+    if (anz.length) {
       return finalize(anz, "anz-ledger", 0, ["Read as an ANZ-style statement (withdrawals and deposits)."]);
     }
     const generic = parseGenericLedger(text, yearHint);
-    if (generic.length >= 3) {
+    if (generic.length) {
       return finalize(generic, "pdf-ledger", 0, ["Read as a statement PDF (dates and amounts)."]);
     }
   }
@@ -172,11 +214,11 @@ function parseUnsafe(input: string, filename: string): ParseResult {
   const csv = parseCsv(text, filename);
   if (csv.ok) return csv;
   const anz = parseAnzLedger(text, yearHint);
-  if (anz.length >= 3) {
+  if (anz.length) {
     return finalize(anz, "anz-ledger", 0, ["Read as an ANZ-style statement (withdrawals and deposits)."]);
   }
   const generic = parseGenericLedger(text, yearHint);
-  if (generic.length >= 3) {
+  if (generic.length) {
     return finalize(generic, "pdf-ledger", 0, ["Read as a statement PDF (dates and amounts)."]);
   }
   return csv;
@@ -375,6 +417,7 @@ function parseGenericLedger(text: string, yearHint: number): Omit<StatementDraft
     let rest = line;
     const isoD = line.match(/^(\d{4}[/.\-]\d{1,2}[/.\-]\d{1,2})\s+(.*)$/);
     const dmy = line.match(/^(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})\s+(.*)$/);
+    const mid = line.match(/(\d{4}[/.\-]\d{1,2}[/.\-]\d{1,2}|\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}|\d{1,2}\s+[A-Za-z]{3}(?:\s+\d{2,4})?)/);
     const mon = line.match(/^(\d{1,2}\s+[A-Za-z]{3}(?:\s+\d{2,4})?)\s+(.*)$/);
     if (isoD) {
       date = parseDate(isoD[1], true, yearHint);
@@ -385,6 +428,9 @@ function parseGenericLedger(text: string, yearHint: number): Omit<StatementDraft
     } else if (mon) {
       date = parseDate(mon[1], true, yearHint);
       rest = mon[2];
+    } else if (mid) {
+      date = parseDate(mid[1], true, yearHint);
+      rest = (line.slice(0, mid.index) + " " + line.slice((mid.index ?? 0) + mid[1].length)).trim();
     } else continue;
     if (!date) continue;
     const moneyMatches = [...rest.matchAll(/\$?(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2}(?:\s*(?:CR|DR))?/gi)].map((m) => m[0]);
