@@ -7,7 +7,10 @@ import { SettingsDialog } from "@/components/settings-dialog";
 import { CoveChat } from "@/components/cove-chat";
 import { StatementImport } from "@/components/statement-import";
 import { Button } from "@/components/ui/button";
+import { useAccountSession } from "@/lib/account-session";
+import { signOutAccount } from "@/lib/account-vault";
 import { isSampleLedger, takeEmptyStart } from "@/lib/fresh-start";
+import { attachLedgerForUser } from "@/lib/ledger-session";
 import { useFinanceStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +37,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const setSettingsOpen = useFinanceStore((s) => s.setSettingsOpen);
   const cycleMode = useFinanceStore((s) => s.cycleMode);
   const setCycleMode = useFinanceStore((s) => s.setCycleMode);
+  const { session } = useAccountSession();
   const [menu, setMenu] = useState(false);
 
   useEffect(() => {
@@ -56,16 +60,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       window.location.reload();
       return;
     }
-    const result = useFinanceStore.persist.rehydrate();
-    void Promise.resolve(result).finally(() => {
-      const s = useFinanceStore.getState();
-      if (isSampleLedger(s.transactions)) {
-        s.clearAll();
-        useFinanceStore.persist.clearStorage();
-      }
-      s.refreshNotices();
-    });
-  }, []);
+    attachLedgerForUser(session?.userId ?? null);
+  }, [session?.userId]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -155,6 +151,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Settings className="size-4" />
           Settings
         </Button>
+        {session ? (
+          <div className="rounded-md bg-sidebar-foreground/10 px-3 py-2">
+            <p className="truncate text-[12px] text-sidebar-foreground">{session.name}</p>
+            <p className="truncate text-[11px] text-sidebar-muted">{session.email}</p>
+            <button
+              type="button"
+              className="mt-1 text-[11px] text-sidebar-muted underline-offset-4 hover:underline"
+              onClick={() => {
+                signOutAccount();
+                attachLedgerForUser(null);
+                window.location.href = "/login";
+              }}
+            >
+              Sign out
+            </button>
+          </div>
+        ) : null}
         <Link
           to="/welcome"
           onClick={() => setMenu(false)}
