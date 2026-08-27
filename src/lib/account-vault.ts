@@ -1,4 +1,5 @@
-/** Local-only accounts. Nothing is sent off this origin. */
+import { coveApiUrl } from "./site";
+
 const ACCOUNTS_KEY = "cove-accounts-v1";
 const SESSION_KEY = "cove-session-v1";
 const ITERATIONS = 120_000;
@@ -116,11 +117,12 @@ type CloudResult = {
   recoveryCode?: string;
   emailed?: boolean;
   resetUrl?: string;
+  emailError?: string;
 };
 
 async function cloudAction(body: Record<string, unknown>): Promise<CloudResult | null> {
   try {
-    const res = await fetch("/api/accounts", {
+    const res = await fetch(coveApiUrl("/api/accounts"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
@@ -191,7 +193,12 @@ export async function requestPasswordReset(email: string) {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const cloud = await cloudAction({ action: "forgot", email: key, origin });
   if (!cloud) throw new Error("Could not reach Cove to start a reset");
-  return { emailed: Boolean(cloud.emailed), resetUrl: cloud.resetUrl as string | undefined };
+  if (cloud.error && !cloud.resetUrl) throw new Error(cloud.error);
+  return {
+    emailed: Boolean(cloud.emailed),
+    resetUrl: cloud.resetUrl,
+    emailError: cloud.emailError,
+  };
 }
 
 export async function resetPasswordWithToken(email: string, token: string, nextPassword: string): Promise<CoveSession> {
