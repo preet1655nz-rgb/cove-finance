@@ -42,7 +42,7 @@ export function looksLikeReversalCredit(note: string, typeRaw = "") {
   return /\b(payment reversal|unpaid item reversal|payment returned)\b/i.test(`${typeRaw} ${note}`);
 }
 
-export function inferStatementType(note: string, fallback: TxType, typeRaw = "") {
+export function inferStatementType(note: string, fallback: TxType, typeRaw = ""): TxType {
   const blob = `${typeRaw} ${note}`;
   if (looksLikeReversalCredit(note, typeRaw)) return "income";
   if (/\bfailed payment\b/i.test(blob)) return "expense";
