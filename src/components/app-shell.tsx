@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { useAccountSession } from "@/lib/account-session";
 import { signOutAccount } from "@/lib/account-vault";
 import { startCloudSync } from "@/lib/cloud-sync";
-import { isSampleLedger, takeEmptyStart } from "@/lib/fresh-start";
 import { attachLedgerForUser } from "@/lib/ledger-session";
 import { useFinanceStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -45,25 +44,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setMenu(false);
   }, [pathname]);
-
-  useEffect(() => {
-    const store = useFinanceStore.getState();
-    const wiped = takeEmptyStart();
-    if (wiped || isSampleLedger(store.transactions)) {
-      store.clearAll();
-      useFinanceStore.persist.clearStorage();
-    }
-    if (wiped) {
-      try {
-        sessionStorage.setItem("cove-reloaded-empty", "1");
-      } catch {
-        /* private mode */
-      }
-      window.location.reload();
-      return;
-    }
-    attachLedgerForUser(session?.userId ?? null);
-  }, [session?.userId]);
 
   useEffect(() => {
     if (!session?.email) return;
