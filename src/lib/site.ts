@@ -16,7 +16,7 @@ export const COVE_SITE = {
     "insights",
     "reports",
     "statement-import",
-    "ask-cove",
+    "cycle-pdf",
   ],
 };
 
@@ -30,7 +30,7 @@ export function coveStatus() {
     storage: "browser-local + optional pglite auth",
     pwa: true,
     website: true,
-    askCove: "local-repo",
+    askCove: false,
     surfaces: COVE_SITE.surfaces,
     features: COVE_SITE.features,
     github: COVE_SITE.github,
