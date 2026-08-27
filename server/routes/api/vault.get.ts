@@ -1,9 +1,17 @@
-import { getSql } from "../../../src/lib/db";
-
-async function ensureVault(sql: Awaited<ReturnType<typeof getSql>>) {
-  await sql.query(
-    "create table if not exists cove_vault (email text primary key, payload jsonb not null, updated_at timestamptz not null default now())",
-  );
+async function readVault(email: string) {
+  const url = process.env.DATABASE_URL?.trim();
+  if (!url) return { source: "local" as const, row: null };
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: url, max: 1 });
+  try {
+    await pool.query(
+      "create table if not exists cove_vault (email text primary key, payload jsonb not null, updated_at timestamptz not null default now())",
+    );
+    const rows = await pool.query("select payload, updated_at from cove_vault where email = $1", [email]);
+    return { source: "cloud" as const, row: rows.rows[0] ?? null };
+  } finally {
+    await pool.end().catch(() => undefined);
+  }
 }
 
 export default defineEventHandler(async (event) => {
@@ -13,15 +21,8 @@ export default defineEventHandler(async (event) => {
     return { error: "email required" };
   }
   try {
-    const sql = await getSql();
-    await ensureVault(sql);
-    const rows = await sql.query<{ payload: unknown; updated_at: string }>(
-      "select payload, updated_at from cove_vault where email = $1",
-      [email],
-    );
-    return { ok: true, source: process.env.DATABASE_URL ? "cloud" : "ephemeral", row: rows[0] ?? null };
+    return { ok: true, ...(await readVault(email)) };
   } catch (err) {
-    setResponseStatus(event, 500);
-    return { error: err instanceof Error ? err.message : "vault read failed" };
+    return { ok: false, source: "local", row: null, error: err instanceof Error ? err.message : "vault read failed" };
   }
 });

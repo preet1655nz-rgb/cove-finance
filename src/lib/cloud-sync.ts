@@ -26,21 +26,29 @@ function snapshot(): VaultPayload {
 }
 
 export async function pullCloudLedger(email: string) {
-  const res = await fetch(`/api/vault?email=${encodeURIComponent(email)}`);
-  if (!res.ok) return false;
-  const data = (await res.json()) as { row?: { payload?: VaultPayload } | null };
-  const payload = data.row?.payload;
-  if (!payload || !Array.isArray(payload.transactions)) return false;
-  useFinanceStore.getState().importData(payload);
-  return true;
+  try {
+    const res = await fetch(`/api/vault?email=${encodeURIComponent(email)}`);
+    if (!res.ok) return false;
+    const data = (await res.json()) as { row?: { payload?: VaultPayload } | null };
+    const payload = data.row?.payload;
+    if (!payload || !Array.isArray(payload.transactions)) return false;
+    useFinanceStore.getState().importData(payload);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function pushCloudLedger(email: string) {
-  await fetch("/api/vault", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email, payload: snapshot() }),
-  });
+  try {
+    await fetch("/api/vault", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, payload: snapshot() }),
+    });
+  } catch {
+    /* local ledger still saved */
+  }
 }
 
 let timer: number | undefined;
