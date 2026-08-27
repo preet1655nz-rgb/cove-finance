@@ -1,4 +1,5 @@
 import { defineEventHandler, getQuery, setResponseStatus } from "h3";
+import { handlePreflight } from "../../lib/cove-cors";
 
 async function readVault(email: string) {
   const url = process.env.DATABASE_URL?.trim();
@@ -17,6 +18,7 @@ async function readVault(email: string) {
 }
 
 export default defineEventHandler(async (event) => {
+  if (handlePreflight(event)) return "";
   const email = String(getQuery(event).email || "").trim().toLowerCase();
   if (!email) {
     setResponseStatus(event, 400);

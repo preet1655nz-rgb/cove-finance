@@ -33,6 +33,10 @@ export async function pullCloudLedger(email: string) {
     const data = (await res.json()) as { row?: { payload?: VaultPayload } | null };
     const payload = data.row?.payload;
     if (!payload || !Array.isArray(payload.transactions)) return false;
+    const remoteCount = payload.transactions.length;
+    const localCount = useFinanceStore.getState().transactions.length;
+    if (remoteCount === 0 && localCount > 0) return false;
+    if (remoteCount < localCount) return false;
     useFinanceStore.getState().importData(payload);
     return true;
   } catch {
@@ -54,9 +58,22 @@ export async function pushCloudLedger(email: string) {
 
 let timer: number | undefined;
 export function startCloudSync(email: string) {
-  void pullCloudLedger(email).then((had) => {
-    if (!had) void pushCloudLedger(email);
-  });
+  const kick = () => {
+    void pullCloudLedger(email).then((had) => {
+      if (!had) void pushCloudLedger(email);
+    });
+  };
+
+  if (useFinanceStore.getState().hydrated) kick();
+  else {
+    const unsubHydrate = useFinanceStore.subscribe((s) => {
+      if (s.hydrated) {
+        unsubHydrate();
+        kick();
+      }
+    });
+  }
+
   const unsub = useFinanceStore.subscribe(() => {
     window.clearTimeout(timer);
     timer = window.setTimeout(() => {

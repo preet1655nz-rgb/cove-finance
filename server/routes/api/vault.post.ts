@@ -1,4 +1,5 @@
 import { defineEventHandler, readBody, setResponseStatus } from "h3";
+import { handlePreflight } from "../../lib/cove-cors";
 
 async function writeVault(email: string, payload: unknown) {
   const url = process.env.DATABASE_URL?.trim();
@@ -20,6 +21,7 @@ async function writeVault(email: string, payload: unknown) {
 }
 
 export default defineEventHandler(async (event) => {
+  if (handlePreflight(event)) return "";
   const body = await readBody<{ email?: string; payload?: unknown }>(event);
   const email = String(body?.email || "").trim().toLowerCase();
   if (!email || body?.payload == null) {
