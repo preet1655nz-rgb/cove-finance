@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as ActivityRouteImport } from './routes/activity'
 import { Route as BillsRouteImport } from './routes/bills'
 import { Route as BudgetsRouteImport } from './routes/budgets'
@@ -21,6 +22,11 @@ import { Route as ReportsRouteImport } from './routes/reports'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WelcomeRoute = WelcomeRouteImport.update({
+  id: '/welcome',
+  path: '/welcome',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ActivityRoute = ActivityRouteImport.update({
@@ -61,6 +67,7 @@ const ReportsRoute = ReportsRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/welcome': typeof WelcomeRoute
   '/activity': typeof ActivityRoute
   '/bills': typeof BillsRoute
   '/budgets': typeof BudgetsRoute
@@ -71,6 +78,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/welcome': typeof WelcomeRoute
   '/activity': typeof ActivityRoute
   '/bills': typeof BillsRoute
   '/budgets': typeof BudgetsRoute
@@ -82,6 +90,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/welcome': typeof WelcomeRoute
   '/activity': typeof ActivityRoute
   '/bills': typeof BillsRoute
   '/budgets': typeof BudgetsRoute
@@ -94,6 +103,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/welcome'
     | '/activity'
     | '/bills'
     | '/budgets'
@@ -104,6 +114,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/welcome'
     | '/activity'
     | '/bills'
     | '/budgets'
@@ -114,6 +125,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/welcome'
     | '/activity'
     | '/bills'
     | '/budgets'
@@ -125,6 +137,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  WelcomeRoute: typeof WelcomeRoute
   ActivityRoute: typeof ActivityRoute
   BillsRoute: typeof BillsRoute
   BudgetsRoute: typeof BudgetsRoute
@@ -141,6 +154,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/welcome': {
+      id: '/welcome'
+      path: '/welcome'
+      fullPath: '/welcome'
+      preLoaderRoute: typeof WelcomeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/activity': {
@@ -197,6 +217,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  WelcomeRoute: WelcomeRoute,
   ActivityRoute: ActivityRoute,
   BillsRoute: BillsRoute,
   BudgetsRoute: BudgetsRoute,
