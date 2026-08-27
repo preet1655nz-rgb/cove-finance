@@ -1,4 +1,5 @@
 import { defineEventHandler, readBody, setResponseStatus } from "h3";
+import { handlePreflight } from "../../lib/cove-cors";
 import {
   ensureAccountTables,
   getPool,
@@ -37,6 +38,7 @@ function rowFromDb(r: Record<string, unknown>): CloudAccount {
 }
 
 export default defineEventHandler(async (event) => {
+  if (handlePreflight(event)) return "";
   const body = (await readBody<Body>(event)) ?? {};
   const action = String(body.action || "login");
   const email = normalizeEmail(String(body.email || ""));
@@ -148,8 +150,15 @@ export default defineEventHandler(async (event) => {
     }
 
     if (action === "forgot") {
+      if (!email) {
+        setResponseStatus(event, 400);
+        return { ok: false, error: "Enter the Gmail you used to sign up" };
+      }
       const found = await pool.query("select email from cove_accounts where email = $1", [email]);
-      if (!found.rows[0]) return { ok: true, emailed: false };
+      if (!found.rows[0]) {
+        setResponseStatus(event, 404);
+        return { ok: false, emailed: false, error: "No cloud account for that email. Create one on signup first." };
+      }
       const token = randomHex(24);
       const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       await pool.query("insert into cove_reset_tokens (token_hash, email, expires_at) values ($1,$2,$3)", [
@@ -158,9 +167,18 @@ export default defineEventHandler(async (event) => {
         expires,
       ]);
       const origin = String(body.origin || process.env.BETTER_AUTH_URL || "https://cove-finance.vercel.app").replace(/\/$/, "");
-      const resetUrl = `${origin}/reset?email=${encodeURIComponent(email)}&token=${token}`;
-      const emailed = await sendResetEmail(email, resetUrl).catch(() => false);
-      return { ok: true, emailed, resetUrl: emailed ? undefined : resetUrl };
+      const safeOrigin = origin.includes("cove-website") ? "https://cove-finance.vercel.app" : origin;
+      const resetUrl = `${safeOrigin}/reset?email=${encodeURIComponent(email)}&token=${token}`;
+      const sent = await sendResetEmail(email, resetUrl).catch((err) => ({
+        ok: false,
+        error: err instanceof Error ? err.message : "Email send failed",
+      }));
+      return {
+        ok: true,
+        emailed: sent.ok,
+        resetUrl: sent.ok ? undefined : resetUrl,
+        emailError: sent.ok ? undefined : sent.error,
+      };
     }
 
     if (action === "reset") {
