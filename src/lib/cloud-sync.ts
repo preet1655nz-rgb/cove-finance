@@ -35,7 +35,7 @@ export async function pullCloudLedger(email: string) {
     if (!payload || !Array.isArray(payload.transactions)) return false;
     const remoteCount = payload.transactions.length;
     const localCount = useFinanceStore.getState().transactions.length;
-    if (remoteCount === 0 && localCount > 0) return false;
+    if (remoteCount === 0) return false;
     if (remoteCount < localCount) return false;
     useFinanceStore.getState().importData(payload);
     return true;
@@ -45,11 +45,13 @@ export async function pullCloudLedger(email: string) {
 }
 
 export async function pushCloudLedger(email: string) {
+  const payload = snapshot();
+  if (!Array.isArray(payload.transactions) || payload.transactions.length === 0) return;
   try {
     await fetch(coveApiUrl("/api/vault"), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email, payload: snapshot() }),
+      body: JSON.stringify({ email, payload }),
     });
   } catch {
     /* local ledger still saved */

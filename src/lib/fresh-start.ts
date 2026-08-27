@@ -25,6 +25,7 @@ export function wipeCoveStorage() {
     }
     for (const key of keys) {
       if (KEEP.has(key)) continue;
+      if (key.startsWith("cove-finance-v3:")) continue;
       if (/cove/i.test(key)) storage.removeItem(key);
     }
   }
