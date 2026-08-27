@@ -21,7 +21,7 @@ export function normalizeEmail(email: string) {
 
 export function isGmail(email: string) {
   const key = normalizeEmail(email);
-  return key.endsWith("@gmail.com") or key.endsWith("@googlemail.com");
+  return key.endsWith("@gmail.com") || key.endsWith("@googlemail.com");
 }
 
 export function randomHex(bytes = 16) {
