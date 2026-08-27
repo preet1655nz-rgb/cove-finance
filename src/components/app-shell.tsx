@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { NotificationCenter } from "@/components/notification-center";
 import { QuickAdd } from "@/components/quick-add";
 import { SettingsDialog } from "@/components/settings-dialog";
-import { CoveChat } from "@/components/cove-chat";
 import { StatementImport } from "@/components/statement-import";
 import { Button } from "@/components/ui/button";
 import { useAccountSession } from "@/lib/account-session";
@@ -259,7 +258,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <QuickAdd />
       <SettingsDialog />
       <StatementImport />
-      <CoveChat />
     </div>
   );
 }
