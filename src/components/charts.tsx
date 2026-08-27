@@ -100,6 +100,7 @@ export function CategoryDonut({
   showAmounts = false,
   selectedId = null,
   onSelect,
+  includeAllocations = false,
 }: {
   txs: Transaction[];
   currency: string;
@@ -107,25 +108,31 @@ export function CategoryDonut({
   showAmounts?: boolean;
   selectedId?: string | null;
   onSelect?: (id: string | null) => void;
+  includeAllocations?: boolean;
 }) {
   const mounted = useMounted();
   const data = useMemo(() => {
     const map = new Map<string, number>();
     for (const t of txs.filter((t) => {
       if (t.type !== kind) return false;
-      if (t.categoryId === "transfer-out" || t.categoryId === "transfer-in") return false;
-      if (kind === "expense" && (t.categoryId === "investing" || t.categoryId === "savings" || t.categoryId === "credit-card" || t.categoryId === "debt")) {
+      if (t.categoryId === "transfer-out" || t.categoryId === "transfer-in" || t.categoryId === "reversal") return false;
+      if (kind === "expense" && !includeAllocations && (t.categoryId === "investing" || t.categoryId === "savings")) {
         return false;
       }
       return true;
     })) {
-      map.set(t.categoryId, (map.get(t.categoryId) ?? 0) + t.amount);
+      const id = t.categoryId === "credit-card" ? "debt" : t.categoryId;
+      map.set(id, (map.get(id) ?? 0) + t.amount);
     }
     return [...map.entries()]
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 6)
-      .map(([id, value]) => ({ id, name: getCategory(id).name, value }));
-  }, [txs, kind]);
+      .slice(0, 8)
+      .map(([id, value]) => ({
+        id,
+        name: id === "debt" ? "Debt" : getCategory(id).name,
+        value,
+      }));
+  }, [txs, kind, includeAllocations]);
   const total = data.reduce((s, d) => s + d.value, 0);
   if (!mounted) return <div className="h-[220px] rounded-lg bg-muted/50" />;
   if (!data.length) {
