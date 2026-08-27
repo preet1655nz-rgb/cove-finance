@@ -35,6 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const unread = useFinanceStore((s) => s.notices.filter((n) => !n.read).length);
   const setAddOpen = useFinanceStore((s) => s.setAddOpen);
+  const setImportOpen = useFinanceStore((s) => s.setImportOpen);
   const setSettingsOpen = useFinanceStore((s) => s.setSettingsOpen);
   const cycleMode = useFinanceStore((s) => s.cycleMode);
   const setCycleMode = useFinanceStore((s) => s.setCycleMode);
@@ -145,6 +146,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         >
           <Plus className="size-4" />
           Add
+        </Button>
+        <Button
+          variant="ghost"
+          className="w-full text-sidebar-muted hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground"
+          onClick={() => {
+            setMenu(false);
+            setImportOpen(true);
+          }}
+        >
+          <Receipt className="size-4" />
+          Statement
         </Button>
         <Button
           variant="ghost"
