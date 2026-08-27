@@ -1,3 +1,4 @@
+import { defineEventHandler, readBody, setResponseStatus } from "h3";
 import {
   ensureAccountTables,
   getPool,
@@ -49,7 +50,7 @@ export default defineEventHandler(async (event) => {
     await ensureAccountTables(pool);
 
     if (action === "register" || action === "sync") {
-      if (!email || !/[^\s@]+@[^\s@]+\.[^\s@]+/.test(email)) {
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         setResponseStatus(event, 400);
         return { ok: false, error: "Enter a valid email" };
       }
