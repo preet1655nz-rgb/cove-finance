@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Bell, CalendarDays, FileText, LayoutGrid, ListChecks, Menu, PieChart, Plus, Receipt, Settings, Wallet, X } from "lucide-react";
+import { Bell, CalendarDays, FileText, Globe, LayoutGrid, ListChecks, Menu, PieChart, Plus, Receipt, Settings, Wallet, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NotificationCenter } from "@/components/notification-center";
 import { QuickAdd } from "@/components/quick-add";
@@ -155,12 +155,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Settings className="size-4" />
           Settings
         </Button>
+        <Link
+          to="/welcome"
+          onClick={() => setMenu(false)}
+          className="flex h-10 items-center justify-center gap-2 rounded-md text-sm text-sidebar-muted hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground"
+        >
+          <Globe className="size-4" strokeWidth={1.75} />
+          Website
+        </Link>
       </div>
     </>
   );
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="min-h-dvh overflow-x-hidden bg-background">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[220px] flex-col bg-sidebar text-sidebar-foreground lg:flex">
         {sidebar}
       </aside>
@@ -175,7 +183,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       ) : null}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-[240px] flex-col bg-sidebar text-sidebar-foreground shadow-card transition-transform duration-200 lg:hidden",
+          "fixed inset-y-0 left-0 z-50 flex w-[min(240px,88vw)] flex-col bg-sidebar text-sidebar-foreground shadow-card transition-transform duration-200 lg:hidden",
           menu ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -199,13 +207,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <CoveMark dark className="lg:hidden" />
             <span className="font-display text-lg tracking-tight lg:hidden">Cove</span>
           </div>
-          <div className="flex items-center gap-1 sm:gap-2">
-            <div className="flex rounded-lg bg-muted p-0.5">
+          <div className="flex min-w-0 items-center gap-1 sm:gap-2">
+            <div className="flex shrink-0 rounded-lg bg-muted p-0.5">
               <button
                 type="button"
                 onClick={() => setCycleMode(false)}
                 className={cn(
-                  "h-8 rounded-md px-2.5 text-[12px] font-medium sm:px-3",
+                  "h-8 rounded-md px-2 text-[12px] font-medium sm:px-3",
                   !cycleMode ? "bg-card text-foreground shadow-card" : "text-muted-foreground",
                 )}
               >
@@ -215,7 +223,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 type="button"
                 onClick={() => setCycleMode(true)}
                 className={cn(
-                  "h-8 rounded-md px-2.5 text-[12px] font-medium sm:px-3",
+                  "h-8 rounded-md px-2 text-[12px] font-medium sm:px-3",
                   cycleMode ? "bg-card text-foreground shadow-card" : "text-muted-foreground",
                 )}
               >
@@ -234,7 +242,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
 
       <div className="lg:pl-[220px]">
-        <main className="mx-auto max-w-[1120px] px-4 pt-6 pb-16 lg:px-6 lg:pt-8">{children}</main>
+        <main className="mx-auto w-full max-w-[1120px] min-w-0 px-4 pt-6 pb-16 lg:px-6 lg:pt-8">{children}</main>
       </div>
 
       <QuickAdd />
