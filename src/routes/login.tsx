@@ -37,21 +37,29 @@ function LoginPage() {
 
   async function gmail() {
     setError("");
+    if (!isGmail(email)) {
+      setError("Enter your Gmail address above, then tap Continue with Gmail.");
+      return;
+    }
+    if (password) {
+      await submit();
+      return;
+    }
     if (authEnabled) {
       setBusy(true);
       try {
         await signIn("grok-google", { callbackURL: "/signed-in", errorCallbackURL: "/login" });
       } catch (err) {
         setBusy(false);
-        setError(err instanceof Error ? err.message : "Gmail sign-in did not start");
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Google sign-in is not available. Enter your Gmail password and tap Sign in.",
+        );
       }
       return;
     }
-    if (!isGmail(email)) {
-      setError("Enter your Gmail address above, then tap Continue with Gmail.");
-      return;
-    }
-    await submit();
+    setError("Enter your Gmail password, then tap Sign in. Same login works on the home-screen app.");
   }
 
   return (
@@ -76,7 +84,7 @@ function LoginPage() {
           Continue with Gmail
         </Button>
         <p className="text-[12px] leading-relaxed text-muted-foreground">
-          Use the same email and password on Safari and the home-screen app. Continue with Gmail opens Google sign-in when it is available.
+          Use the same email and password on Safari and the home-screen app.
         </p>
       </form>
       <div className="mt-5 flex flex-col gap-2 text-sm">
