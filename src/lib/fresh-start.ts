@@ -1,7 +1,8 @@
 /** One-time wipe of demo / leftover Cove storage so the ledger starts empty. */
-export const LEDGER_KEY = "cove-finance-v3";
+export const LEDGER_KEY = "cove-finance-v3:guest";
 const FLAG = "cove-empty-once";
-const FLAG_VAL = "2026-08-21c";
+const FLAG_VAL = "2026-08-27-accounts";
+const KEEP = new Set(["cove-accounts-v1", "cove-session-v1", FLAG]);
 
 type Sampleish = { note: string; amount: number; id?: string };
 
@@ -23,7 +24,7 @@ export function wipeCoveStorage() {
       if (key) keys.push(key);
     }
     for (const key of keys) {
-      if (key === FLAG) continue;
+      if (KEEP.has(key)) continue;
       if (/cove/i.test(key)) storage.removeItem(key);
     }
   }
