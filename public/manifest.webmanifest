@@ -1,0 +1,26 @@
+{
+  "name": "Cove",
+  "short_name": "Cove",
+  "description": "Quiet money tracker — website and home-screen app.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f3f1ec",
+  "theme_color": "#1c1b18",
+  "icons": [
+    {
+      "src": "/cove-mark-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/cove-mark-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

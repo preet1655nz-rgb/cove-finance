@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Cove — Quiet money</title>
+  <meta name="description" content="Cove website and PWA. Full-stack tracker for income, living spend, budgets, bills and reports." />
+  <link rel="icon" href="https://cove-finance.vercel.app/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap" rel="stylesheet" />
+  <style>
+    :root { --bg:#f3f1ec; --ink:#1c1b18; --muted:#6f6c64; --card:#fbf9f5; --line:#e2ded5; --primary:#2a2e2c; --primary-fg:#f6f4ef; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; overflow-x: hidden; }
+    body { font-family: Figtree, system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+    h1, h2 { font-family: Newsreader, Georgia, serif; font-weight: 500; letter-spacing: -0.03em; }
+    a { color: inherit; }
+    .wrap { width: min(1120px, calc(100% - 32px)); margin-inline: auto; }
+    header { position: sticky; top: 0; backdrop-filter: blur(12px); background: rgb(243 241 236 / 0.86); border-bottom: 1px solid var(--line); }
+    .bar { display: flex; align-items: center; justify-content: space-between; height: 64px; gap: 16px; }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font-family: Newsreader, serif; font-size: 22px; }
+    .mark { width: 32px; height: 32px; border-radius: 4px; object-fit: cover; background: var(--ink); }
+    .btn { display: inline-flex; align-items: center; height: 42px; padding: 0 18px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 500; background: var(--primary); color: var(--primary-fg); }
+    .btn.ghost { background: #edeae3; color: var(--ink); }
+    .hero { display: grid; gap: 28px; padding: 72px 0; }
+    .kicker { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    h1 { font-size: clamp(36px, 6vw, 60px); line-height: 1.08; margin: 12px 0 0; }
+    .lead { max-width: 38rem; font-size: 18px; line-height: 1.6; color: var(--muted); }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 28px; }
+    .card { background: var(--card); border-radius: 16px; padding: 20px; box-shadow: 0 0 0 1px rgb(28 27 24 / .06); }
+    .card p { font-size: 13px; line-height: 1.55; color: var(--muted); }
+    footer { border-top: 1px solid var(--line); padding: 28px 0 40px; color: var(--muted); font-size: 13px; }
+    @media (max-width: 720px) { .hero { padding: 40px 0; } }
+  </style>
+</head>
+<body>
+  <header><div class="wrap bar">
+    <a class="brand" href="/"><img class="mark" src="https://cove-finance.vercel.app/cove-mark-192.png" alt="" width="32" height="32" />Cove</a>
+    <a class="btn" href="https://cove-finance.vercel.app/">Open full-stack app</a>
+  </div></header>
+  <main class="wrap hero">
+    <div>
+      <p class="kicker">Website + PWA · GitHub + Vercel</p>
+      <h1>Cove is a website and a home-screen app.</h1>
+      <p class="lead">Same full-stack product: React frontend, Nitro/Vercel backend, local Ask Cove, statement import, insights, reports. Install the PWA from the tracker, or use it in any browser.</p>
+      <div class="actions">
+        <a class="btn" href="https://cove-finance.vercel.app/">Tracker / PWA</a>
+        <a class="btn ghost" href="https://cove-finance.vercel.app/welcome">In-app website</a>
+        <a class="btn ghost" href="https://github.com/preet1655nz-rgb/cove-finance">GitHub</a>
+      </div>
+    </div>
+    <div class="grid">
+      <article class="card"><h3>Website</h3><p>Browser layout, marketing + tracker. Frontend talks to <code>/api/health</code> and <code>/api/status</code>.</p></article>
+      <article class="card"><h3>PWA</h3><p>Add to Home Screen. Standalone display, Cove icons, offline shell via <code>/sw.js</code>.</p></article>
+      <article class="card"><h3>Backend</h3><p>Nitro on Vercel: auth, PWA manifest middleware, health/status APIs.</p></article>
+      <article class="card"><h3>Backup</h3><p>Source on GitHub <code>preet1655nz-rgb/cove-finance</code>. Live on Vercel.</p></article>
+    </div>
+  </main>
+  <footer class="wrap">Cove · Quiet money · website/index.html is the public site source in the same repo.</footer>
+</body>
+</html>
