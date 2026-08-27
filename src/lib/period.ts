@@ -4,8 +4,15 @@ import { isTransferTx } from "./intelligence";
 import { addDays, addMonths, endOfMonth, endOfWeek, inRange, startOfMonth, startOfWeek, todayISO } from "./utils";
 import type { Period, Transaction } from "./types";
 
-export function periodRange(period: Period): { from: string; to: string; label: string } {
+export type DateSpan = { from?: string; to?: string } | null | undefined;
+
+export function periodRange(period: Period, custom?: DateSpan): { from: string; to: string; label: string } {
   const today = todayISO();
+  if (period === "custom") {
+    const from = custom?.from || `${today.slice(0, 8)}01`;
+    const to = custom?.to || today;
+    return { from, to: to < from ? from : to, label: "Custom" };
+  }
   if (period === "this-week") {
     return { from: startOfWeek(today), to: endOfWeek(today), label: "This week" };
   }
@@ -28,13 +35,19 @@ export function periodRange(period: Period): { from: string; to: string; label: 
   return { from: "1970-01-01", to: today, label: "All time" };
 }
 
-export function activeRange(txs: Transaction[], period: Period, cycleMode: boolean, cycleOffset = 0) {
+export function activeRange(
+  txs: Transaction[],
+  period: Period,
+  cycleMode: boolean,
+  cycleOffset = 0,
+  custom?: DateSpan,
+) {
   if (cycleMode) return payCycleRange(txs, cycleOffset);
-  return periodRange(period);
+  return periodRange(period, custom);
 }
 
-export function inPeriod(tx: Transaction, period: Period) {
-  const { from, to } = periodRange(period);
+export function inPeriod(tx: Transaction, period: Period, custom?: DateSpan) {
+  const { from, to } = periodRange(period, custom);
   return inRange(tx.date, from, to);
 }
 
@@ -58,8 +71,10 @@ export function cashBuckets(txs: Transaction[]) {
     else expense += t.amount;
   }
   const leftover = income - expense;
+  const allocated = expense + investing + savings;
+  const variance = income - allocated;
   const cash = leftover - investing - savings - credit - debt;
-  return { income, expense, investing, savings, credit, debt, leftover, cash };
+  return { income, expense, investing, savings, credit, debt, leftover, allocated, variance, cash };
 }
 
 export function sumBy(
