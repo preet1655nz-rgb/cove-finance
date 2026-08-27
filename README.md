@@ -1,42 +1,44 @@
 # Cove
 
-A quiet income and expense tracker. Add money in seconds, watch cash flow, set budgets, import a bank PDF, and export a monthly statement.
+A quiet income and expense tracker. Website and PWA. Full-stack: React frontend + Nitro/Vercel backend.
 
-## Website and app
+## Surfaces
 
-Cove is one product with two faces on the same Vercel URL:
+| Surface | URL | What it is |
+| --- | --- | --- |
+| Full-stack app + PWA | https://cove-finance.vercel.app/ | Tracker you can use in the browser or Add to Home Screen |
+| In-app website | https://cove-finance.vercel.app/welcome | Marketing + product site inside the same app |
+| Public website | https://cove-website-phi.vercel.app/ | Public landing (source: `website/index.html`) |
+| Source backup | https://github.com/preet1655nz-rgb/cove-finance | GitHub `main` |
 
-- **Website** — [cove-finance.vercel.app/welcome](https://cove-finance.vercel.app/welcome)
-- **Tracker** — [cove-finance.vercel.app](https://cove-finance.vercel.app/)
+### PWA
 
-Same functions in the browser: overview, calendar, activity, budgets, bills, insights (click a chart slice for a breakdown), reports, statement import, and Ask Cove. Data stays in the visitor's browser.
+- Manifest: `/manifest.webmanifest` (Cove name, icons, standalone)
+- Service worker: `/sw.js` (offline shell)
+- iOS install tutorial: `/?install=1&platform=ios`
+- On iPhone: Safari → Share → Add to Home Screen
+
+### Website (full stack)
+
+Frontend routes live in `src/routes/`. Backend lives on Vercel/Nitro:
+
+- `GET /api/health` — liveness
+- `GET /api/status` — stack, PWA flag, feature list
+- Auth + PGLite in `src/lib/auth` and `src/lib/db.ts`
+- PWA middleware in `server/middleware/grok-pwa.ts`
+
+Ledger data stays in the visitor's browser. The backend serves the site, APIs, auth, and PWA chrome.
 
 ## Features
 
 - **Overview** — balance, in/out, cash-flow chart, spending mix, budget pulse, recent activity
-- **Calendar** — month grid plus an ANZ-style statement (date, type and details, withdrawals, deposits, running balance)
-- **Activity** — searchable, filterable ledger grouped by day
+- **Calendar** — month grid plus an ANZ-style statement
+- **Activity** — searchable ledger grouped by day
 - **Budgets** — monthly caps with progress, plus recurring bills
-- **Insights** — daily spend, savings rate, category mix, budget vs spent
-- **Reports** — month picker and downloadable PDF statement
-- **Statement import** — drop an ANZ Go PDF (or CSV / OFX / QIF). Direct credits become income, withdrawals become expenses. Review before import.
-- **Notices** — budget caps, bills due in the next few days, spending hints
-- **Settings** — currency, browser notifications, JSON backup, sample data
+- **Insights** — category mix; click a slice for the entries inside it
+- **Reports** — downloadable PDF statement
+- **Statement import** — NZ bank CSV / OFX / QIF / ANZ Go PDF
 - **Ask Cove** — local assistant in the repo (no xAI API)
-
-All figures stay on this device (browser storage). Nothing is sent to a server.
-
-## Try an ANZ statement
-
-Calendar → **Statement** → drop your bank PDF, or **Try ANZ PDF**. Cove was checked against a real Go page:
-
-- Deposits **$6,919.71** (IRD wages, Uber, DiDi)
-- Withdrawals **$6,888.99**
-- 47 entries, opening balance skipped
-
-## Keyboard
-
-- `N` — new entry
 
 ## Local development
 
@@ -45,12 +47,12 @@ npm install
 npm run dev
 ```
 
+Then open `/` (PWA tracker), `/welcome` (website), `/api/status` (backend).
+
 ## Stack
 
-React, TanStack Start, Tailwind, Recharts, Zustand, pdf.js.
+React, TanStack Start, Nitro (Vercel), Tailwind, Recharts, Zustand, pdf.js, Better Auth / PGLite.
 
-## Links
+## Deploy note
 
-- Website: [cove-finance.vercel.app/welcome](https://cove-finance.vercel.app/welcome)
-- App: [cove-finance.vercel.app](https://cove-finance.vercel.app/)
-- Source: [github.com/preet1655nz-rgb/cove-finance](https://github.com/preet1655nz-rgb/cove-finance)
+The `cove-finance` Vercel project is currently **not Git-linked**. After pushing to GitHub, open the Vercel project → Deployments → Redeploy from `main`, or connect `preet1655nz-rgb/cove-finance` so every push publishes the website, PWA, and API together.
