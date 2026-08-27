@@ -24,10 +24,11 @@ Frontend routes live in `src/routes/`. Backend lives on Vercel/Nitro:
 
 - `GET /api/health` — liveness
 - `GET /api/status` — stack, PWA flag, feature list
+- `POST /api/accounts` — register / login / Gmail OAuth adopt / forgot / reset
 - Auth + PGLite in `src/lib/auth` and `src/lib/db.ts`
 - PWA middleware in `server/middleware/grok-pwa.ts`
 
-Ledger data stays in the visitor's browser. The backend serves the site, APIs, auth, and PWA chrome.
+Ledger data stays in the visitor's browser. Accounts sync through Neon so the same email works on the website and the iPhone home-screen app.
 
 ## Features
 
@@ -35,7 +36,7 @@ Ledger data stays in the visitor's browser. The backend serves the site, APIs, a
 - **Calendar** — month grid plus an ANZ-style statement
 - **Activity** — searchable ledger grouped by day
 - **Budgets** — monthly caps with progress, plus recurring bills
-- **Insights** — category mix; click a slice for the entries inside it
+- **Insights** — category mix including debt; click a slice for the entries inside it
 - **Reports** — downloadable PDF statement
 - **Statement import** — NZ bank CSV / OFX / QIF / ANZ Go PDF
 - **Ask Cove** — local assistant in the repo (no xAI API)
@@ -51,7 +52,7 @@ Then open `/` (PWA tracker), `/welcome` (website), `/api/status` (backend).
 
 ## Stack
 
-React, TanStack Start, Nitro (Vercel), Tailwind, Recharts, Zustand, pdf.js, Better Auth / PGLite.
+React, TanStack Start, Nitro (Vercel), Tailwind, Recharts, Zustand, pdf.js, Better Auth / PGLite, Neon, Resend.
 
 ## Deploy
 
@@ -59,10 +60,13 @@ Vercel project `cove-finance` is Git-linked to `preet1655nz-rgb/cove-finance` on
 
 ### Env for Gmail reset links
 
-In the Vercel project:
+Resend can be authorised against this GitHub repo. Vercel still needs the API key as an env var:
 
-- `DATABASE_URL` — Neon Postgres (accounts + ledger vault)
-- `RESEND_API_KEY` — Resend API key so Forgot password emails Gmail
-- `EMAIL_FROM` — verified Resend sender, e.g. `Cove <you@yourdomain>`
+1. Resend → API Keys → copy `re_...`
+2. Vercel → cove-finance → Settings → Environment Variables → add for Production + Preview:
+   - `DATABASE_URL` — Neon Postgres (accounts + ledger vault)
+   - `RESEND_API_KEY` — the Resend key
+   - `EMAIL_FROM` — verified Resend sender, e.g. `Cove <you@yourdomain>`
+3. Redeploy after saving env vars.
 
-Until a domain is verified in Resend, Cove falls back to `beth.t@example.com` (Resend only delivers that to the Resend account inbox).
+Until a domain is verified in Resend, Cove falls back to `Cove <beth.t@example.com>`. That address only delivers into the Resend dashboard inbox, not a real Gmail inbox. Verify a domain in Resend to land reset links in Gmail.

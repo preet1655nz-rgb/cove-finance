@@ -109,6 +109,35 @@ function publicSession(row: AccountRow): CoveSession {
   return { userId: row.id, email: row.email, name: row.name, gmail: row.gmail };
 }
 
+type CloudResult = {
+  ok?: boolean;
+  error?: string;
+  session?: CoveSession;
+  recoveryCode?: string;
+  emailed?: boolean;
+  resetUrl?: string;
+};
+
+async function cloudAction(body: Record<string, unknown>): Promise<CloudResult | null> {
+  try {
+    const res = await fetch("/api/accounts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = (await res.json()) as CloudResult;
+    if (!res.ok && !data?.error) return { ok: false, error: "Cloud login failed" };
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function cacheSession(session: CoveSession) {
+  writeSession(session);
+  return session;
+}
+
 export async function createAccount(input: {
   email: string;
   name: string;
@@ -117,6 +146,13 @@ export async function createAccount(input: {
   const email = normalizeEmail(input.email);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email");
   if (input.password.length < 8) throw new Error("Password must be at least 8 characters");
+  const cloud = await cloudAction({ action: "register", email, name: input.name, password: input.password });
+  if (cloud?.ok && cloud.session) {
+    return { session: cacheSession(cloud.session), recoveryCode: cloud.recoveryCode || "" };
+  }
+  if (cloud && cloud.error && !/not configured/i.test(cloud.error || "")) {
+    throw new Error(cloud.error);
+  }
   const rows = readRows();
   if (rows.some((r) => r.email === email)) throw new Error("An account with that email already exists");
   const passSalt = randomHex();
@@ -134,20 +170,57 @@ export async function createAccount(input: {
     recoveryHash: await derive(recoveryCode.toLowerCase(), recoverySalt),
   };
   writeRows([...rows, row]);
-  const session = publicSession(row);
-  writeSession(session);
-  return { session, recoveryCode };
+  return { session: cacheSession(publicSession(row)), recoveryCode };
 }
 
 export async function signInAccount(email: string, password: string): Promise<CoveSession> {
   const key = normalizeEmail(email);
+  const cloud = await cloudAction({ action: "login", email: key, password });
+  if (cloud?.ok && cloud.session) return cacheSession(cloud.session);
   const row = readRows().find((r) => r.email === key);
-  if (!row) throw new Error("No account for that email");
+  if (!row) throw new Error(cloud?.error || "No account for that email on this device. Sign in once on the website, or create the account again here.");
   const hash = await derive(password, row.passSalt);
   if (hash !== row.passHash) throw new Error("Wrong password");
-  const session = publicSession(row);
-  writeSession(session);
+  const session = cacheSession(publicSession(row));
+  void cloudAction({ action: "sync", email: key, name: row.name, password });
   return session;
+}
+
+export async function requestPasswordReset(email: string) {
+  const key = normalizeEmail(email);
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const cloud = await cloudAction({ action: "forgot", email: key, origin });
+  if (!cloud) throw new Error("Could not reach Cove to start a reset");
+  return { emailed: Boolean(cloud.emailed), resetUrl: cloud.resetUrl as string | undefined };
+}
+
+export async function resetPasswordWithToken(email: string, token: string, nextPassword: string): Promise<CoveSession> {
+  const cloud = await cloudAction({ action: "reset", email, token, password: nextPassword });
+  if (cloud?.ok && cloud.session) return cacheSession(cloud.session);
+  throw new Error(cloud?.error || "Reset link expired or invalid");
+}
+
+export async function adoptOauthAccount(email: string, name?: string): Promise<CoveSession> {
+  const key = normalizeEmail(email);
+  const cloud = await cloudAction({ action: "oauth", email: key, name });
+  if (cloud?.ok && cloud.session) return cacheSession(cloud.session);
+  const existing = readRows().find((r) => r.email === key);
+  if (existing) return cacheSession(publicSession(existing));
+  const passSalt = randomHex();
+  const recoverySalt = randomHex();
+  const row: AccountRow = {
+    id: randomHex(12),
+    email: key,
+    name: (name || "").trim() || key.split("@")[0],
+    gmail: true,
+    createdAt: new Date().toISOString(),
+    passSalt,
+    passHash: await derive(randomHex(12), passSalt),
+    recoverySalt,
+    recoveryHash: await derive(randomHex(10), recoverySalt),
+  };
+  writeRows([...readRows(), row]);
+  return cacheSession(publicSession(row));
 }
 
 export async function resetPassword(email: string, recoveryCode: string, nextPassword: string): Promise<CoveSession> {
@@ -155,15 +228,15 @@ export async function resetPassword(email: string, recoveryCode: string, nextPas
   const key = normalizeEmail(email);
   const rows = readRows();
   const idx = rows.findIndex((r) => r.email === key);
-  if (idx < 0) throw new Error("No account for that email");
+  if (idx < 0) throw new Error("No account for that email on this device. Use the emailed reset link instead.");
   const row = rows[idx];
   const ok = (await derive(recoveryCode.trim().toLowerCase(), row.recoverySalt)) === row.recoveryHash;
   if (!ok) throw new Error("Recovery code does not match");
   const passSalt = randomHex();
   rows[idx] = { ...row, passSalt, passHash: await derive(nextPassword, passSalt) };
   writeRows(rows);
-  const session = publicSession(rows[idx]);
-  writeSession(session);
+  const session = cacheSession(publicSession(rows[idx]));
+  void cloudAction({ action: "sync", email: key, name: row.name, password: nextPassword });
   return session;
 }
 

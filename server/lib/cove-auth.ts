@@ -75,10 +75,7 @@ export async function ensureAccountTables(pool: import("pg").Pool) {
   `);
 }
 
-export async function sendResetEmail(to: string, resetUrl: string) {
-  const key = process.env.RESEND_API_KEY?.trim();
-  const from = process.env.EMAIL_FROM?.trim() || "Cove <noreply@cove-finance.app>";
-  if (!key) return false;
+async function resendSend(key: string, from: string, to: string, resetUrl: string) {
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -89,10 +86,19 @@ export async function sendResetEmail(to: string, resetUrl: string) {
       from,
       to,
       subject: "Reset your Cove password",
-      html: `<p>Reset your Cove password with this link (expires in 1 hour):</p><p><a href="${resetUrl}">${resetUrl}</a></p>`,
+      html: `<p>Reset your Cove password with this link. It expires in one hour.</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>If you did not ask for this, you can ignore the email.</p>`,
     }),
   });
   return res.ok;
+}
+
+export async function sendResetEmail(to: string, resetUrl: string) {
+  const key = process.env.RESEND_API_KEY?.trim();
+  if (!key) return false;
+  const preferred = process.env.EMAIL_FROM?.trim();
+  const fallback = "Cove <beth.t@example.com>";
+  if (preferred && (await resendSend(key, preferred, to, resetUrl))) return true;
+  return resendSend(key, fallback, to, resetUrl);
 }
 
 export function tokenHash(token: string) {

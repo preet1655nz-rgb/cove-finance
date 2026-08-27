@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { AuthFrame } from "@/components/auth-frame";
+import { PasswordField } from "@/components/password-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,7 +28,7 @@ function SignupPage() {
     try {
       const { session, recoveryCode } = await createAccount({ email, name, password });
       attachLedgerForUser(session.userId);
-      setRecovery(recoveryCode);
+      setRecovery(recoveryCode || "Saved on the server. Use Forgot password if you need a Gmail reset link.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create account");
     } finally {
@@ -37,9 +38,15 @@ function SignupPage() {
 
   if (recovery) {
     return (
-      <AuthFrame title="Save your recovery code" subtitle="This is the only way to reset your password. Cove does not send email.">
-        <p className="rounded-md bg-muted px-3 py-3 font-mono text-sm tracking-wide">{recovery}</p>
-        <p className="mt-3 text-[13px] text-muted-foreground">Write it down. It will not be shown again.</p>
+      <AuthFrame title="Account ready" subtitle="You can sign in on the website and the iPhone home-screen app with this email.">
+        {recovery.startsWith("Saved") ? (
+          <p className="text-sm text-muted-foreground">{recovery}</p>
+        ) : (
+          <>
+            <p className="rounded-md bg-muted px-3 py-3 font-mono text-sm tracking-wide">{recovery}</p>
+            <p className="mt-3 text-[13px] text-muted-foreground">Keep this recovery code. You can also use Forgot password to get a Gmail reset link.</p>
+          </>
+        )}
         <Button className="mt-6 w-full" onClick={() => void navigate({ to: "/" })}>
           Open Cove
         </Button>
@@ -48,7 +55,7 @@ function SignupPage() {
   }
 
   return (
-    <AuthFrame title="Create account" subtitle="One login for the website and the iPhone home-screen app on this device.">
+    <AuthFrame title="Create account" subtitle="One login for the website and the iPhone home-screen app.">
       <form
         className="space-y-4"
         onSubmit={(e) => {
@@ -64,10 +71,7 @@ function SignupPage() {
           <Label htmlFor="email">Email or Gmail</Label>
           <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="password">Password</Label>
-          <Input id="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required />
-        </div>
+        <PasswordField id="password" label="Password" value={password} onChange={setPassword} autoComplete="new-password" minLength={8} />
         {error ? <p className="text-sm text-expense">{error}</p> : null}
         <Button className="w-full" disabled={busy} type="submit">
           {busy ? "Creating…" : "Create account"}
