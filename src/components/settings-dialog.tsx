@@ -21,8 +21,6 @@ export function SettingsDialog() {
   const setOpen = useFinanceStore((s) => s.setSettingsOpen);
   const settings = useFinanceStore((s) => s.settings);
   const updateSettings = useFinanceStore((s) => s.updateSettings);
-  const resetSample = useFinanceStore((s) => s.resetSample);
-  const clearAll = useFinanceStore((s) => s.clearAll);
   const importData = useFinanceStore((s) => s.importData);
   const setImportOpen = useFinanceStore((s) => s.setImportOpen);
   const transactions = useFinanceStore((s) => s.transactions);
@@ -72,7 +70,7 @@ export function SettingsDialog() {
       <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
-          <DialogDescription>Each account keeps its own books on this origin. Nothing is shared.</DialogDescription>
+          <DialogDescription>This login keeps its books in Cove. App updates never delete the account or its data.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-5">
           {session ? (
@@ -137,14 +135,9 @@ export function SettingsDialog() {
           <Button variant="outline" onClick={() => { setOpen(false); setImportOpen(true); }}>
             Upload bank statement
           </Button>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => { resetSample(); toast.success("Sample data restored"); }}>
-              Restore sample
-            </Button>
-            <Button variant="ghost" className="text-destructive" onClick={() => { clearAll(); toast.success("Cleared"); }}>
-              Clear all
-            </Button>
-          </div>
+          <p className="text-[12px] leading-relaxed text-muted-foreground">
+            Sign-out only leaves this device. The Gmail account and every transaction, budget and bill stay in Cove.
+          </p>
         </div>
       </DialogContent>
     </Dialog>
