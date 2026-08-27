@@ -19,7 +19,7 @@ import { signOutAccount } from "@/lib/account-vault";
 export function SettingsDialog() {
   const open = useFinanceStore((s) => s.settingsOpen);
   const setOpen = useFinanceStore((s) => s.setSettingsOpen);
-  const settings = useFinanceStore((s) => s.settings;
+  const settings = useFinanceStore((s) => s.settings);
   const updateSettings = useFinanceStore((s) => s.updateSettings);
   const resetSample = useFinanceStore((s) => s.resetSample);
   const clearAll = useFinanceStore((s) => s.clearAll);
