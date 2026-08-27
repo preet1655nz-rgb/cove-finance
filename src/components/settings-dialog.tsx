@@ -13,11 +13,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { useAccountSession } from "@/lib/account-session";
+import { signOutAccount } from "@/lib/account-vault";
 
 export function SettingsDialog() {
   const open = useFinanceStore((s) => s.settingsOpen);
   const setOpen = useFinanceStore((s) => s.setSettingsOpen);
-  const settings = useFinanceStore((s) => s.settings);
+  const settings = useFinanceStore((s) => s.settings;
   const updateSettings = useFinanceStore((s) => s.updateSettings);
   const resetSample = useFinanceStore((s) => s.resetSample);
   const clearAll = useFinanceStore((s) => s.clearAll);
@@ -26,6 +28,7 @@ export function SettingsDialog() {
   const transactions = useFinanceStore((s) => s.transactions);
   const budgets = useFinanceStore((s) => s.budgets);
   const bills = useFinanceStore((s) => s.bills);
+  const { session } = useAccountSession();
 
   async function enableBrowser() {
     if (!("Notification" in window)) {
@@ -69,16 +72,28 @@ export function SettingsDialog() {
       <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
-          <DialogDescription>Everything stays on this device.</DialogDescription>
+          <DialogDescription>Each account keeps its own books on this origin. Nothing is shared.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-5">
+          {session ? (
+            <div className="rounded-lg bg-muted/60 px-3 py-3">
+              <p className="text-sm font-medium">{session.name}</p>
+              <p className="text-[12px] text-muted-foreground">{session.email}{session.gmail ? " · Gmail" : ""}</p>
+              <button
+                type="button"
+                className="mt-2 text-[12px] text-muted-foreground underline-offset-4 hover:underline"
+                onClick={() => {
+                  signOutAccount();
+                  window.location.href = "/login";
+                }}
+              >
+                Sign out
+              </button>
+            </div>
+          ) : null}
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="name">Name</Label>
-            <Input
-              id="name"
-              value={settings.displayName}
-              onChange={(e) => updateSettings({ displayName: e.target.value })}
-            />
+            <Input id="name" value={settings.displayName} onChange={(e) => updateSettings({ displayName: e.target.value })} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Currency</Label>
@@ -113,38 +128,20 @@ export function SettingsDialog() {
               Export JSON
             </Button>
             <label className="inline-flex">
-              <input
-                type="file"
-                accept="application/json"
-                className="sr-only"
-                onChange={(e) => onImport(e.target.files?.[0])}
-              />
+              <input type="file" accept="application/json" className="sr-only" onChange={(e) => onImport(e.target.files?.[0])} />
               <span className="inline-flex h-11 w-full items-center justify-center rounded-md bg-card text-sm font-medium shadow-card">
                 Import JSON
               </span>
             </label>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setOpen(false);
-              setImportOpen(true);
-            }}
-          >
+          <Button variant="outline" onClick={() => { setOpen(false); setImportOpen(true); }}>
             Upload bank statement
           </Button>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => { resetSample(); toast.success("Sample data restored"); }}>
               Restore sample
             </Button>
-            <Button
-              variant="ghost"
-              className="text-destructive"
-              onClick={() => {
-                clearAll();
-                toast.success("Cleared");
-              }}
-            >
+            <Button variant="ghost" className="text-destructive" onClick={() => { clearAll(); toast.success("Cleared"); }}>
               Clear all
             </Button>
           </div>
