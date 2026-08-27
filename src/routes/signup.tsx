@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { attachLedgerForUser } from "@/lib/ledger-session";
-import { createAccount } from "@/lib/account-vault";
+import { createAccount, isGmail } from "@/lib/account-vault";
 
 export const Route = createFileRoute("/signup")({
   component: SignupPage,
@@ -76,6 +76,24 @@ function SignupPage() {
         <Button className="w-full" disabled={busy} type="submit">
           {busy ? "Creating…" : "Create account"}
         </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          disabled={busy}
+          onClick={() => {
+            if (!isGmail(email)) {
+              setError("Enter your Gmail address and a password, then tap Continue with Gmail.");
+              return;
+            }
+            void submit();
+          }}
+        >
+          Continue with Gmail
+        </Button>
+        <p className="text-[12px] leading-relaxed text-muted-foreground">
+          Gmail signup uses the same Cove cloud account as the website and the iPhone home-screen app.
+        </p>
       </form>
       <p className="mt-5 text-sm">
         Already have one?{" "}
