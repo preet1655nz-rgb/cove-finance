@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { readSession, type CoveSession } from "./account-vault";
+import { attachLedgerForUser } from "./ledger-session";
 
 const Ctx = createContext<{ session: CoveSession | null; ready: boolean }>({ session: null, ready: false });
 
@@ -8,9 +9,15 @@ export function AccountSessionProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    setSession(readSession());
+    const current = readSession();
+    setSession(current);
+    attachLedgerForUser(current?.userId ?? null);
     setReady(true);
-    const onChange = () => setSession(readSession());
+    const onChange = () => {
+      const next = readSession();
+      setSession(next);
+      attachLedgerForUser(next?.userId ?? null);
+    };
     window.addEventListener("cove-session", onChange);
     window.addEventListener("storage", onChange);
     return () => {
