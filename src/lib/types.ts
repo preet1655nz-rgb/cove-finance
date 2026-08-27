@@ -89,9 +89,12 @@ export type Settings = {
   currency: string;
   browserNotifications: boolean;
   budgetAlertPct: number;
+  customFrom?: string;
+  customTo?: string;
+  homeWidget?: boolean;
 };
 
-export type Period = "this-week" | "fortnight" | "this-month" | "last-month" | "quarter" | "year" | "all";
+export type Period = "this-week" | "fortnight" | "this-month" | "last-month" | "quarter" | "year" | "all" | "custom";
 
 export const CURRENCIES = [
   { code: "NZD", label: "NZ Dollar" },
