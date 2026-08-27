@@ -53,6 +53,6 @@ Then open `/` (PWA tracker), `/welcome` (website), `/api/status` (backend).
 
 React, TanStack Start, Nitro (Vercel), Tailwind, Recharts, Zustand, pdf.js, Better Auth / PGLite.
 
-## Deploy note
+## Deploy
 
-The `cove-finance` Vercel project is currently **not Git-linked**. After pushing to GitHub, open the Vercel project → Deployments → Redeploy from `main`, or connect `preet1655nz-rgb/cove-finance` so every push publishes the website, PWA, and API together.
+Vercel project `cove-finance` is Git-linked to `preet1655nz-rgb/cove-finance` on branch `main`. Every push to `main` publishes the website, PWA, and API together.
