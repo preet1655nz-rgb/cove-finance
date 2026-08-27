@@ -1,4 +1,5 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import { AccountSessionProvider } from "@/lib/account-session";
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { PwaRegister } from "@/components/pwa-register";
@@ -34,10 +35,6 @@ export const Route = createRootRoute({
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: "/manifest.webmanifest" },
       { rel: "manifest", href: "/__grok/manifest.webmanifest" },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap",
-      },
     ],
   }),
   component: () => (
@@ -48,10 +45,12 @@ export const Route = createRootRoute({
       <body>
         <PreviewHostBridge />
         <PwaRegister />
-        <AuthProvider>
-          <Outlet />
-          <Toaster />
-        </AuthProvider>
+        <AccountSessionProvider>
+          <AuthProvider>
+            <Outlet />
+            <Toaster />
+          </AuthProvider>
+        </AccountSessionProvider>
         <Scripts />
       </body>
     </html>
