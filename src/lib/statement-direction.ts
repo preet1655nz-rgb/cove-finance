@@ -16,7 +16,16 @@ export function looksLikeCredit(note: string, typeRaw = "") {
 }
 
 export function looksLikeOwnAccountMove(note: string) {
+  if (looksLikeSavings(note)) return false;
   return OWN_PARTY.test(note) || /\b(credit transfer|debit transfer|internal transfer)\b/i.test(note);
+}
+
+export function looksLikeSavings(note: string) {
+  return /\b((wstpac|westpac).{0,16}sav|guri wstpac|kiwisaver|emergency fund)\b/i.test(note);
+}
+
+export function looksLikeReversal(note: string) {
+  return /\b(payment reversal|unpaid item reversal|failed payment|reversal|dishonour|insufficient funds|\bnsf\b)\b/i.test(note);
 }
 
 export function inferStatementType(note: string, fallback: TxType, typeRaw = ""): TxType {
