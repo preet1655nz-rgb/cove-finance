@@ -1,3 +1,4 @@
+import { coveApiUrl } from "./site";
 import { useFinanceStore } from "./store";
 
 type VaultPayload = {
@@ -27,7 +28,7 @@ function snapshot(): VaultPayload {
 
 export async function pullCloudLedger(email: string) {
   try {
-    const res = await fetch(`/api/vault?email=${encodeURIComponent(email)}`);
+    const res = await fetch(coveApiUrl(`/api/vault?email=${encodeURIComponent(email)}`));
     if (!res.ok) return false;
     const data = (await res.json()) as { row?: { payload?: VaultPayload } | null };
     const payload = data.row?.payload;
@@ -41,7 +42,7 @@ export async function pullCloudLedger(email: string) {
 
 export async function pushCloudLedger(email: string) {
   try {
-    await fetch("/api/vault", {
+    await fetch(coveApiUrl("/api/vault"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email, payload: snapshot() }),

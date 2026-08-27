@@ -79,7 +79,7 @@ function resendTestFrom() {
   return `Cove <onboarding@${"resend"}.${"dev"}>`;
 }
 
-async function resendSend(key: string, from: string, to: string, resetUrl: string) {
+async function resendSend(key: string, from: string, to: string, resetUrl: string): Promise<{ ok: boolean; error?: string }> {
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -93,18 +93,28 @@ async function resendSend(key: string, from: string, to: string, resetUrl: strin
       html: `<p>Reset your Cove password with this link. It expires in one hour.</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>If you did not ask for this, you can ignore the email.</p>`,
     }),
   });
-  if (res.ok) return true;
+  if (res.ok) return { ok: true };
   const text = await res.text().catch(() => "");
   console.error("resend failed", res.status, text.slice(0, 300));
-  return false;
+  let message = `Resend ${res.status}`;
+  try {
+    const parsed = JSON.parse(text) as { message?: string };
+    if (parsed.message) message = parsed.message;
+  } catch {
+    if (text) message = text.slice(0, 180);
+  }
+  return { ok: false, error: message };
 }
 
-export async function sendResetEmail(to: string, resetUrl: string) {
+export async function sendResetEmail(to: string, resetUrl: string): Promise<{ ok: boolean; error?: string }> {
   const key = process.env.RESEND_API_KEY?.trim();
-  if (!key) return false;
+  if (!key) return { ok: false, error: "RESEND_API_KEY is not set" };
   const preferred = process.env.EMAIL_FROM?.trim();
   const fallback = resendTestFrom();
-  if (preferred && preferred !== fallback && (await resendSend(key, preferred, to, resetUrl))) return true;
+  if (preferred && preferred !== fallback) {
+    const first = await resendSend(key, preferred, to, resetUrl);
+    if (first.ok) return first;
+  }
   return resendSend(key, fallback, to, resetUrl);
 }
 
