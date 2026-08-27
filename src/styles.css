@@ -58,10 +58,13 @@
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
   }
 
   body {
     @apply bg-background text-foreground font-sans;
+    overflow-x: hidden;
+    min-width: 0;
     background-image:
       radial-gradient(ellipse 80% 50% at 50% -10%, rgb(28 27 24 / 0.035), transparent);
   }
@@ -77,6 +80,11 @@
 
   p {
     text-wrap: pretty;
+  }
+
+  img, svg, canvas, video {
+    max-width: 100%;
+    height: auto;
   }
 }
 
