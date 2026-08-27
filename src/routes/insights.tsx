@@ -3,9 +3,8 @@ import { useMemo, useState } from "react";
 import { BudgetBars, CategoryDonut, FlowChart } from "@/components/charts";
 import { PageFrame } from "@/components/page-frame";
 import { PeriodSelect } from "@/components/period-select";
-import { Button } from "@/components/ui/button";
 import { getCategory } from "@/lib/categories";
-import { money } from "@/lib/format";
+import { money, signedMoney } from "@/lib/format";
 import { isTransferTx, livingTxs, payeeBreakdown, transferFlows } from "@/lib/intelligence";
 import { activeRange, cashBuckets, spentInCategory } from "@/lib/period";
 import { useFinanceStore } from "@/lib/store";
@@ -21,18 +20,23 @@ function InsightsPage() {
   );
 }
 
+function pctOf(part: number, whole: number) {
+  if (!whole) return "—";
+  return `${Math.round((part / whole) * 100)}% of income`;
+}
+
 function Insights() {
   const txs = useFinanceStore((s) => s.transactions);
   const budgets = useFinanceStore((s) => s.budgets);
-  const accounts = useFinanceStore((s) => s.accounts);
   const period = useFinanceStore((s) => s.period);
   const setPeriod = useFinanceStore((s) => s.setPeriod);
   const cycleMode = useFinanceStore((s) => s.cycleMode);
   const cycleOffset = useFinanceStore((s) => s.cycleOffset);
-  const setImportOpen = useFinanceStore((s) => s.setImportOpen);
   const setChatOpen = useFinanceStore((s) => s.setChatOpen);
   const currency = useFinanceStore((s) => s.settings.currency);
-  const range = activeRange(txs, period, cycleMode, cycleOffset);
+  const customFrom = useFinanceStore((s) => s.settings.customFrom);
+  const customTo = useFinanceStore((s) => s.settings.customTo);
+  const range = activeRange(txs, period, cycleMode, cycleOffset, { from: customFrom, to: customTo });
   const slice = txs.filter((t) => inRange(t.date, range.from, range.to));
   const lived = livingTxs(slice);
   const { label, from, to } = range;
@@ -52,16 +56,18 @@ function Insights() {
     lived.filter((t) => t.categoryId === "other" || t.categoryId === "other-income"),
   ).slice(0, 6);
   const people = payeeBreakdown(lived).slice(0, 8);
+  const donutTxs = flow === "expense" ? slice.filter((t) => t.type === "expense" && !isTransferTx(t)) : lived;
 
   const categoryBreakdown = useMemo(() => {
     if (!selectedCategoryId) return [];
-    return lived
+    return donutTxs
       .filter((t) => t.categoryId === selectedCategoryId && t.type === flow)
       .sort((a, b) => (a.date < b.date ? 1 : -1))
       .slice(0, 40);
-  }, [lived, selectedCategoryId, flow]);
+  }, [donutTxs, selectedCategoryId, flow]);
 
   const categoryTotal = categoryBreakdown.reduce((s, t) => s + t.amount, 0);
+  const variance = buckets.income - buckets.expense - buckets.savings - buckets.investing;
 
   const cards = [
     {
@@ -72,17 +78,17 @@ function Insights() {
     {
       title: "Living",
       body: money(buckets.expense, currency, true),
-      hint: `${money(buckets.expense / days, currency)} / day`,
+      hint: `${pctOf(buckets.expense, buckets.income)} · ${money(buckets.expense / days, currency)} / day`,
     },
     {
       title: "Investing",
       body: money(buckets.investing, currency, true),
-      hint: "Sharesies and the like",
+      hint: pctOf(buckets.investing, buckets.income),
     },
     {
       title: "Savings",
       body: money(buckets.savings, currency, true),
-      hint: buckets.income ? `${Math.round((buckets.savings / buckets.income) * 100)}% of income` : "Kept separate from living",
+      hint: pctOf(buckets.savings, buckets.income),
     },
   ];
 
@@ -111,36 +117,14 @@ function Insights() {
       </div>
 
       <section className="rounded-xl bg-card p-5 shadow-card">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="text-sm font-medium">Linked accounts</h2>
-          <Button variant="outline" onClick={() => setImportOpen(true)}>
-            Link statement
-          </Button>
-        </div>
-        {accounts.length ? (
-          <ul className="divide-y divide-border/70">
-            {accounts.map((a) => {
-              const list = txs.filter((t) => t.accountId === a.id);
-              const bal = list.reduce((s, t) => s + (t.type === "income" ? t.amount : -t.amount), 0);
-              return (
-                <li key={a.id} className="flex items-baseline justify-between gap-3 py-3">
-                  <div>
-                    <p className="text-sm font-medium">{a.name}</p>
-                    <p className="text-[12px] text-muted-foreground">
-                      {a.bank !== "other" ? a.bank.toUpperCase() : "Account"} · {list.length} entries
-                    </p>
-                  </div>
-                  <p className="text-sm tabular-nums">{money(bal, currency, true)}</p>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Upload statements from each bank and I’ll keep them as separate pots — transfers from A to B
-            show as out on A and in on B, without counting as spending.
-          </p>
-        )}
+        <p className="text-[11px] tracking-wide text-muted-foreground uppercase">Variance</p>
+        <p className="mt-2 font-display text-3xl tabular-nums">{signedMoney(variance, currency)}</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {money(buckets.income, currency)} income − {money(buckets.expense, currency)} living − {money(buckets.savings, currency)} savings − {money(buckets.investing, currency)} investing
+        </p>
+        <p className="mt-2 text-[12px] text-muted-foreground">
+          Then cards {money(buckets.credit, currency)} · debt {money(buckets.debt, currency)} · transfers {money(moved, currency)} (not spending) · cash movement {signedMoney(buckets.cash, currency)}.
+        </p>
       </section>
 
       <section className="rounded-xl bg-card p-5 shadow-card">
@@ -196,12 +180,13 @@ function Insights() {
             </div>
           </div>
           <CategoryDonut
-            txs={lived}
+            txs={donutTxs}
             currency={currency}
             kind={flow}
             showAmounts
             selectedId={selectedCategoryId}
             onSelect={setSelectedCategoryId}
+            includeAllocations
           />
           {selectedCategoryId ? (
             <div className="mt-5 border-t border-border pt-4">
