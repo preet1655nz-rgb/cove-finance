@@ -4,16 +4,25 @@ import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { Toaster } from "@/components/ui/sonner";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "Cove";
+const APP_NAME = "Cove — Quiet money";
 
 export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { title: APP_NAME },
       { name: "theme-color", content: "#1C1B18" },
-      { name: "description", content: "A quiet harbor for income, spending, and reports." },
+      {
+        name: "description",
+        content: "Cove is a free website for income, living spend, budgets, bills, insights and reports. Data stays in your browser.",
+      },
+      { property: "og:title", content: "Cove — Quiet money" },
+      {
+        property: "og:description",
+        content: "A quiet harbor for income, spending, and reports. Use it as a website in any browser.",
+      },
+      { property: "og:type", content: "website" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
