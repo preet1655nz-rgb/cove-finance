@@ -9,6 +9,7 @@ import { StatementImport } from "@/components/statement-import";
 import { Button } from "@/components/ui/button";
 import { useAccountSession } from "@/lib/account-session";
 import { signOutAccount } from "@/lib/account-vault";
+import { startCloudSync } from "@/lib/cloud-sync";
 import { isSampleLedger, takeEmptyStart } from "@/lib/fresh-start";
 import { attachLedgerForUser } from "@/lib/ledger-session";
 import { useFinanceStore } from "@/lib/store";
@@ -62,6 +63,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
     attachLedgerForUser(session?.userId ?? null);
   }, [session?.userId]);
+
+  useEffect(() => {
+    if (!session?.email) return;
+    return startCloudSync(session.email);
+  }, [session?.email]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
