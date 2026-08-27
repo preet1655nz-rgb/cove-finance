@@ -61,19 +61,28 @@ function Insights() {
   const categoryBreakdown = useMemo(() => {
     if (!selectedCategoryId) return [];
     return donutTxs
-      .filter((t) => t.categoryId === selectedCategoryId && t.type === flow)
+      .filter((t) => {
+        const id = t.categoryId === "credit-card" ? "debt" : t.categoryId;
+        return id === selectedCategoryId && t.type === flow;
+      })
       .sort((a, b) => (a.date < b.date ? 1 : -1))
       .slice(0, 40);
   }, [donutTxs, selectedCategoryId, flow]);
 
   const categoryTotal = categoryBreakdown.reduce((s, t) => s + t.amount, 0);
-  const variance = buckets.income - buckets.expense - buckets.savings - buckets.investing;
+  const debtPaid = buckets.debt + buckets.credit;
+  const variance = buckets.variance;
 
   const cards = [
     {
       title: "Income",
       body: money(buckets.income, currency, true),
       hint: `${label} · not transfers`,
+    },
+    {
+      title: "Debt",
+      body: money(debtPaid, currency, true),
+      hint: `${pctOf(debtPaid, buckets.income)} · cards + loans`,
     },
     {
       title: "Living",
@@ -106,7 +115,7 @@ function Insights() {
         )}
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {cards.map((c) => (
           <article key={c.title} className="rounded-xl bg-card p-5 shadow-card">
             <p className="text-[11px] tracking-wide text-muted-foreground uppercase">{c.title}</p>
@@ -120,7 +129,7 @@ function Insights() {
         <p className="text-[11px] tracking-wide text-muted-foreground uppercase">Variance</p>
         <p className="mt-2 font-display text-3xl tabular-nums">{signedMoney(variance, currency)}</p>
         <p className="mt-2 text-sm text-muted-foreground">
-          {money(buckets.income, currency)} income − {money(buckets.expense, currency)} living − {money(buckets.savings, currency)} savings − {money(buckets.investing, currency)} investing
+          {money(buckets.income, currency)} income − {money(buckets.expense, currency)} living − {money(debtPaid, currency)} debt − {money(buckets.savings, currency)} savings − {money(buckets.investing, currency)} investing
         </p>
         <p className="mt-2 text-[12px] text-muted-foreground">
           Then cards {money(buckets.credit, currency)} · debt {money(buckets.debt, currency)} · transfers {money(moved, currency)} (not spending) · cash movement {signedMoney(buckets.cash, currency)}.
