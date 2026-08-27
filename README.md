@@ -56,3 +56,13 @@ React, TanStack Start, Nitro (Vercel), Tailwind, Recharts, Zustand, pdf.js, Bett
 ## Deploy
 
 Vercel project `cove-finance` is Git-linked to `preet1655nz-rgb/cove-finance` on branch `main`. Every push to `main` publishes the website, PWA, and API together.
+
+### Env for Gmail reset links
+
+In the Vercel project:
+
+- `DATABASE_URL` — Neon Postgres (accounts + ledger vault)
+- `RESEND_API_KEY` — Resend API key so Forgot password emails Gmail
+- `EMAIL_FROM` — verified Resend sender, e.g. `Cove <you@yourdomain>`
+
+Until a domain is verified in Resend, Cove falls back to `beth.t@example.com` (Resend only delivers that to the Resend account inbox).
