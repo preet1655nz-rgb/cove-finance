@@ -1,3 +1,5 @@
+import { defineEventHandler, getQuery, setResponseStatus } from "h3";
+
 async function readVault(email: string) {
   const url = process.env.DATABASE_URL?.trim();
   if (!url) return { source: "local" as const, row: null };

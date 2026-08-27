@@ -1,3 +1,5 @@
+import { defineEventHandler, readBody, setResponseStatus } from "h3";
+
 async function writeVault(email: string, payload: unknown) {
   const url = process.env.DATABASE_URL?.trim();
   if (!url) return { source: "local" as const };
