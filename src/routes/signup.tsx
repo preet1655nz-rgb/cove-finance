@@ -71,10 +71,10 @@ function SignupPage() {
           <Label htmlFor="email">Email or Gmail</Label>
           <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </div>
-        <PasswordField id="password" label="Password" value={password} onChange={setPassword} autoComplete="new-password" minLength={8} />
+        <PasswordField id="password" label="Password (min 8 characters)" value={password} onChange={setPassword} autoComplete="new-password" minLength={8} />
         {error ? <p className="text-sm text-expense">{error}</p> : null}
         <Button className="w-full" disabled={busy} type="submit">
-          {busy ? "Creating…" : "Create account"}
+          {busy ? "Creating…" : isGmail(email) ? "Create Gmail account" : "Create account"}
         </Button>
         <Button
           type="button"
@@ -83,7 +83,11 @@ function SignupPage() {
           disabled={busy}
           onClick={() => {
             if (!isGmail(email)) {
-              setError("Enter your Gmail address and a password, then tap Continue with Gmail.");
+              setError("Type your @gmail.com address above.");
+              return;
+            }
+            if (password.length < 8) {
+              setError("Choose a password of at least 8 characters, then tap Continue with Gmail.");
               return;
             }
             void submit();
@@ -92,7 +96,7 @@ function SignupPage() {
           Continue with Gmail
         </Button>
         <p className="text-[12px] leading-relaxed text-muted-foreground">
-          Gmail signup uses the same Cove cloud account as the website and the iPhone home-screen app.
+          Gmail signup stores the account in Cove’s shared cloud. Use the same Gmail and password on the website and the iPhone home-screen app.
         </p>
       </form>
       <p className="mt-5 text-sm">

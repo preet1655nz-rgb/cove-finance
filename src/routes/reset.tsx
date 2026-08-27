@@ -42,11 +42,15 @@ function ResetPage() {
     setBusy(true);
     try {
       const result = await requestPasswordReset(email);
-      if (result.emailed) setNote("Reset link sent. Open Gmail on this phone or computer.");
+      if (result.emailed) setNote("Reset link sent to Gmail. Check inbox and spam, then open the link.");
       else if (result.resetUrl) {
-        setNote("Resend is not sending yet, so Cove opened the reset link here.");
+        setNote(
+          result.emailError
+            ? `Gmail delivery is blocked until a Resend domain is verified. Use the on-screen reset link.`
+            : "Gmail delivery is unavailable, so Cove opened the reset link here.",
+        );
         window.location.href = result.resetUrl;
-      } else setNote("If that email has a Cove account, a reset was prepared.");
+      } else setNote("No cloud account for that email. Create one on signup first.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start reset");
     } finally {

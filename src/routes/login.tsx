@@ -84,7 +84,7 @@ function LoginPage() {
           Continue with Gmail
         </Button>
         <p className="text-[12px] leading-relaxed text-muted-foreground">
-          Use the same email and password on Safari and the home-screen app.
+          Type your Gmail and Cove password, then Sign in or Continue with Gmail. Same cloud login on the website and the home-screen app.
         </p>
       </form>
       <div className="mt-5 flex flex-col gap-2 text-sm">
