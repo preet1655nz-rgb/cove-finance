@@ -1,6 +1,7 @@
 import { isAllocationCategory, isTransferCategory } from "./categories";
 import { payCycleRange } from "./cycle";
 import { isTransferTx } from "./intelligence";
+import { isWashTx } from "./reversals";
 import { addDays, addMonths, endOfMonth, endOfWeek, inRange, startOfMonth, startOfWeek, todayISO } from "./utils";
 import type { Period, Transaction } from "./types";
 
@@ -59,7 +60,7 @@ export function cashBuckets(txs: Transaction[]) {
   let credit = 0;
   let debt = 0;
   for (const t of txs) {
-    if (isTransferTx(t) || isTransferCategory(t.categoryId)) continue;
+    if (isTransferTx(t) || isTransferCategory(t.categoryId) || isWashTx(t)) continue;
     if (t.type === "income") {
       income += t.amount;
       continue;
@@ -71,7 +72,7 @@ export function cashBuckets(txs: Transaction[]) {
     else expense += t.amount;
   }
   const leftover = income - expense;
-  const allocated = expense + investing + savings;
+  const allocated = expense + investing + savings + credit + debt;
   const variance = income - allocated;
   const cash = leftover - investing - savings - credit - debt;
   return { income, expense, investing, savings, credit, debt, leftover, allocated, variance, cash };
@@ -98,7 +99,7 @@ export function spentInCategory(
   to: string,
 ) {
   return txs
-    .filter((t) => t.type === "expense" && t.categoryId === categoryId && inRange(t.date, from, to))
+    .filter((t) => t.type === "expense" && t.categoryId === categoryId && inRange(t.date, from, to) && !isWashTx(t))
     .reduce((s, t) => s + t.amount, 0);
 }
 
@@ -118,5 +119,5 @@ export function monthlySeries(txs: Transaction[], months = 6) {
 }
 
 export function isLivingExpenseTx(t: Transaction) {
-  return t.type === "expense" && !isTransferTx(t) && !isAllocationCategory(t.categoryId);
+  return t.type === "expense" && !isTransferTx(t) && !isWashTx(t) && !isAllocationCategory(t.categoryId);
 }
