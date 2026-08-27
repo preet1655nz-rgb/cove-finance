@@ -92,6 +92,30 @@
   box-shadow: var(--shadow-border);
 }
 
+@media (max-width: 767px) {
+  main {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-bottom: max(6rem, env(safe-area-inset-bottom));
+  }
+
+  .font-display.text-3xl {
+    font-size: 1.65rem;
+    line-height: 1.15;
+  }
+
+  .recharts-wrapper,
+  .recharts-surface {
+    max-width: 100%;
+  }
+}
+
+@media (min-width: 1024px) {
+  main {
+    padding-bottom: 4rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
