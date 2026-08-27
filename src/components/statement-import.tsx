@@ -20,10 +20,13 @@ import {
   type StatementDraft,
 } from "@/lib/statement";
 import { classifyNote, inferAccountMeta } from "@/lib/intelligence";
-import { isTransferCategory } from "@/lib/categories";
+import { CATEGORIES, isTransferCategory } from "@/lib/categories";
+import { inferStatementType, looksLikeOwnAccountMove } from "@/lib/statement-direction";
 import { useFinanceStore } from "@/lib/store";
 import type { TxType } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+type ReviewRow = StatementDraft & { skipReason?: "duplicate" | "transfer" | "invalid" };
 
 export function StatementImport() {
   const open = useFinanceStore((s) => s.importOpen);
@@ -36,7 +39,7 @@ export function StatementImport() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
-  const [rows, setRows] = useState<StatementDraft[]>([]);
+  const [rows, setRows] = useState<ReviewRow[]>([]);
   const [skipped, setSkipped] = useState(0);
   const [drag, setDrag] = useState(false);
   const [heldFile, setHeldFile] = useState<File | null>(null);
@@ -74,21 +77,36 @@ export function StatementImport() {
     }
     setError(null);
     setNeedsPassword(false);
-    const tagged = result.rows.map((r) => {
-      const hit = classifyNote(r.note, r.type, useFinanceStore.getState().rules);
-      return { ...r, categoryId: hit.categoryId };
+    const tagged: ReviewRow[] = result.rows.map((r) => {
+      const type = inferStatementType(r.note, r.type);
+      const hit = classifyNote(r.note, type, useFinanceStore.getState().rules);
+      let categoryId = hit.categoryId;
+      let skipReason: ReviewRow["skipReason"];
+      if (looksLikeOwnAccountMove(r.note) && type === "income" && !isTransferCategory(categoryId)) {
+        categoryId = "transfer-in";
+        skipReason = "transfer";
+      }
+      if (isTransferCategory(categoryId)) skipReason = skipReason ?? "transfer";
+      const transferish = Boolean(skipReason === "transfer" || isTransferCategory(categoryId));
+      return {
+        ...r,
+        type,
+        categoryId,
+        skipReason,
+        included: r.duplicate || transferish ? false : r.included,
+      };
     });
-    const transfers = tagged.filter((r) => isTransferCategory(r.categoryId));
-    const living = tagged.filter((r) => !isTransferCategory(r.categoryId));
-    setRows(applyDuplicates(living, useFinanceStore.getState().transactions));
-    setSkipped(result.skipped + transfers.length);
-    const warnings = [...result.warnings];
-    if (transfers.length) {
-      warnings.push(
-        `${transfers.length} transfer${transfers.length === 1 ? "" : "s"} between your accounts skipped — only income and expenses are imported.`,
+    const reviewed = applyDuplicates(tagged, useFinanceStore.getState().transactions);
+    setRows(reviewed);
+    setSkipped(result.skipped + reviewed.filter((r) => !r.included).length);
+    const nextWarnings = [...result.warnings];
+    const hidden = reviewed.filter((r) => r.skipReason === "transfer" || isTransferCategory(r.categoryId)).length;
+    if (hidden) {
+      nextWarnings.push(
+        `${hidden} look like transfers or credits from another of your accounts. They are unchecked — tick any you still want in the books.`,
       );
     }
-    setWarnings(warnings);
+    setWarnings(nextWarnings);
     const inferred = inferAccountMeta(result.format, result.format, result.rows.map((r) => r.note));
     const existing = useFinanceStore.getState().accounts.find((a) => a.bank === inferred.bank);
     if (existing) setAccountId(existing.id);
@@ -147,7 +165,7 @@ export function StatementImport() {
     }
   }
 
-  function patch(key: string, next: Partial<StatementDraft>) {
+  function patch(key: string, next: Partial<ReviewRow>) {
     setRows((list) =>
       list.map((r) => {
         if (r.key !== key) return r;
@@ -188,9 +206,8 @@ export function StatementImport() {
     if (result.added) toast.success(`Imported ${result.added} ${result.added === 1 ? "entry" : "entries"}`);
     else toast.error("Nothing new to import");
     if (result.skipped) toast.message(`${result.skipped} skipped as duplicates or invalid`);
-    const latest = included.reduce((m, r) => (r.date > m ? r.date : m), included[0]?.date ?? "");
-    if (latest) {
-      void navigate({ to: "/calendar", search: { month: latest.slice(0, 7) } });
+    if (included[0]) {
+      void navigate({ to: "/activity" });
     }
     reset();
   }
@@ -207,7 +224,7 @@ export function StatementImport() {
         <DialogHeader>
           <DialogTitle>Upload statement</DialogTitle>
           <DialogDescription>
-            PDF, CSV, OFX or QIF from any New Zealand bank. Income and expenses only — transfers between your accounts are skipped.
+            PDF, CSV, OFX or QIF from any New Zealand bank. Skipped rows stay visible so you can tick them back in.
           </DialogDescription>
         </DialogHeader>
 
@@ -242,7 +259,7 @@ export function StatementImport() {
               <Upload className="size-5 text-muted-foreground" strokeWidth={1.75} />
               <p className="text-sm font-medium">{busy ? "Reading every page…" : "Drop a bank statement here"}</p>
               <p className="max-w-xs text-[12px] text-muted-foreground">
-                ANZ, ASB, Westpac, BNZ, Kiwibank, TSB — CSV or PDF, any length. Withdrawals become expenses, deposits become income.
+                ANZ, ASB, Westpac, BNZ, Kiwibank, TSB — CSV or PDF. Credits come in as income. Debits go out as expenses.
               </p>
             </button>
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -312,7 +329,7 @@ export function StatementImport() {
             <p className="text-sm text-muted-foreground">
               {included.length} to import · {incomeN} in · {expenseN} out
               {dupN ? ` · ${dupN} already in Cove` : ""}
-              {skipped ? ` · ${skipped} skipped` : ""}
+              {rows.filter((r) => !r.included).length ? ` · ${rows.filter((r) => !r.included).length} skipped (shown below)` : ""}
             </p>
             {warnings.map((w) => (
               <p key={w} className="text-[12px] text-muted-foreground">
@@ -322,7 +339,15 @@ export function StatementImport() {
             <div className="min-h-0 flex-1 overflow-y-auto rounded-xl bg-muted/40 p-1">
               <ul className="divide-y divide-border/70">
                 {rows.map((row) => (
-                  <li key={row.key} className={cn("flex flex-col gap-2 px-3 py-3 lg:flex-row lg:items-center", !row.included && "opacity-50")}>
+                  <li
+                    key={row.key}
+                    className={cn(
+                      "flex flex-col gap-2 px-3 py-3 lg:flex-row lg:items-center",
+                      !row.included && "bg-amber-50/80",
+                      row.skipReason === "transfer" && "bg-sky-50",
+                      row.duplicate && "bg-amber-50",
+                    )}
+                  >
                     <label className="flex items-start gap-3 lg:w-8 lg:shrink-0">
                       <input
                         type="checkbox"
@@ -338,9 +363,13 @@ export function StatementImport() {
                       <p className="hidden text-[12px] text-muted-foreground lg:block">
                         {row.date}
                         {row.duplicate ? " · already in Cove" : ""}
+                        {row.skipReason === "transfer" ? " · transfer / other-account credit" : ""}
+                        {!row.included ? " · skipped — tick to add" : ""}
                       </p>
                       <p className="text-[12px] text-muted-foreground lg:hidden">
-                        {row.duplicate ? "already in Cove" : ""}
+                        {row.duplicate ? "already in Cove · " : ""}
+                        {row.skipReason === "transfer" ? "transfer / credit · " : ""}
+                        {!row.included ? "skipped — tick to add" : ""}
                       </p>
                     </div>
                     <div className="flex flex-nowrap items-center gap-2">
@@ -350,7 +379,10 @@ export function StatementImport() {
                         onChange={(e) => patch(row.key, { categoryId: e.target.value })}
                         className="h-9 min-w-0 max-w-36 flex-1 rounded-md bg-card px-2 text-[13px] shadow-card lg:flex-none"
                       >
-                        {categoriesForSelect(row.type).map((c) => (
+                        {(row.skipReason === "transfer" || row.categoryId.startsWith("transfer")
+                          ? CATEGORIES.filter((c) => c.type === row.type)
+                          : categoriesForSelect(row.type)
+                        ).map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.name}
                           </option>
