@@ -6,10 +6,10 @@ A quiet income and expense tracker. Website and PWA. Full-stack: React frontend 
 
 | Surface | URL | What it is |
 | --- | --- | --- |
-| Full-stack app + PWA | https://cove-finance.vercel.app/ | Tracker you can use in the browser or Add to Home Screen |
-| In-app website | https://cove-finance.vercel.app/welcome | Marketing + product site inside the same app |
-| Public website | https://cove-website-phi.vercel.app/ | Public landing (source: `website/index.html`) |
-| Source backup | https://github.com/preet1655nz-rgb/cove-finance | GitHub `main` |
+| Canonical app + PWA + API | https://cove-finance.vercel.app/ | One product. Browser, iPhone home screen, and backend. |
+| In-app website | https://cove-finance.vercel.app/welcome | Marketing page inside the same app |
+| Public website alias | https://cove-website-phi.vercel.app/ | Same login and ledger via the shared API |
+| Source | https://github.com/preet1655nz-rgb/cove-finance | GitHub `main` |
 
 ### PWA
 
@@ -28,7 +28,7 @@ Frontend routes live in `src/routes/`. Backend lives on Vercel/Nitro:
 - Auth + PGLite in `src/lib/auth` and `src/lib/db.ts`
 - PWA middleware in `server/middleware/grok-pwa.ts`
 
-Ledger data stays in the visitor's browser. Accounts sync through Neon so the same email works on the website and the iPhone home-screen app.
+Website and home-screen app share one backend: Neon `cove_accounts` + `cove_vault`. Sign-in, password reset, and ledger changes flow through `/api/accounts` and `/api/vault` on cove-finance so both surfaces stay in sync. Local storage is a cache per device.
 
 ## Features
 
