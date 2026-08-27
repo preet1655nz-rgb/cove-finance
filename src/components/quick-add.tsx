@@ -12,10 +12,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { Upload } from "lucide-react";
 
 export function QuickAdd() {
   const open = useFinanceStore((s) => s.addOpen);
   const setOpen = useFinanceStore((s) => s.setAddOpen);
+  const setImportOpen = useFinanceStore((s) => s.setImportOpen);
   const draft = useFinanceStore((s) => s.draft);
   const updateDraft = useFinanceStore((s) => s.updateDraft);
   const addTransaction = useFinanceStore((s) => s.addTransaction);
@@ -122,6 +124,20 @@ export function QuickAdd() {
               />
             </div>
           </div>
+
+          {!editingId ? (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setImportOpen(true);
+              }}
+              className="flex h-10 items-center justify-center gap-2 rounded-md bg-muted text-sm text-foreground hover:bg-muted/80"
+            >
+              <Upload className="size-4" />
+              Upload bank statement
+            </button>
+          ) : null}
 
           <div className="flex gap-2">
             {editingId ? (
