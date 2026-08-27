@@ -94,19 +94,36 @@
 
 @media (max-width: 767px) {
   main {
-    padding-left: max(1rem, env(safe-area-inset-left));
-    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-left: max(0.85rem, env(safe-area-inset-left));
+    padding-right: max(0.85rem, env(safe-area-inset-right));
     padding-bottom: max(6rem, env(safe-area-inset-bottom));
   }
 
+  main > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
   .font-display.text-3xl {
-    font-size: 1.65rem;
+    font-size: 1.55rem;
     line-height: 1.15;
   }
 
+  .font-display.text-2xl,
+  .font-display.text-xl {
+    font-size: 1.15rem;
+  }
+
   .recharts-wrapper,
-  .recharts-surface {
-    max-width: 100%;
+  .recharts-surface,
+  .recharts-responsive-container {
+    max-width: 100% !important;
+  }
+
+  header .flex.h-14,
+  header .flex.min-h-14 {
+    height: auto;
+    min-height: 3.5rem;
   }
 }
 
