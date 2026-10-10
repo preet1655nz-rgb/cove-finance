@@ -2,8 +2,8 @@
 @import "tw-animate-css";
 
 @theme {
-  --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Newsreader", ui-serif, Georgia, "Times New Roman", serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "Figtree", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
 
   --color-background: #f3f1ec;
@@ -58,7 +58,9 @@
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
     overflow-x: hidden;
+    text-size-adjust: 100%;
   }
 
   body {
@@ -139,4 +141,14 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+header.sticky {
+  background: color-mix(in srgb, var(--color-background) 78%, transparent);
+  backdrop-filter: saturate(1.2) blur(18px);
+}
+
+[data-profile="rideshare"] {
+  --color-sidebar: #121816;
+  --color-income: #1f6a45;
 }

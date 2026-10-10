@@ -258,7 +258,7 @@ function finalize(
   return { ok: true, format, rows, skipped, warnings };
 }
 
-export function applyDuplicates(rows: StatementDraft[], existing: Transaction[]): StatementDraft[] {
+export function applyDuplicates<T extends StatementDraft>(rows: T[], existing: Transaction[]): T[] {
   const have = new Set(existing.map((t) => txFingerprint(t.date, t.amount, t.note)));
   return rows.map((r) => {
     const duplicate = have.has(r.key);

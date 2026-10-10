@@ -88,7 +88,7 @@ function LoginPage() {
         </p>
       </form>
       <div className="mt-5 flex flex-col gap-2 text-sm">
-        <Link to="/reset" className="text-muted-foreground underline-offset-4 hover:underline">
+        <Link to="/reset" search={{ email: "", token: "" }} className="text-muted-foreground underline-offset-4 hover:underline">
           Forgot password
         </Link>
         <Link to="/signup" className="underline-offset-4 hover:underline">

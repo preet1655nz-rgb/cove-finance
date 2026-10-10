@@ -1,7 +1,8 @@
-import { Link, useRouterState } from "@tanstack/react-router";
-import { Bell, CalendarDays, FileText, Globe, LayoutGrid, ListChecks, Menu, PieChart, Plus, Receipt, Settings, Wallet, X } from "lucide-react";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Bell, CalendarDays, Car, FileText, Globe, LayoutGrid, ListChecks, Menu, PieChart, Plus, Receipt, Settings, Wallet, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NotificationCenter } from "@/components/notification-center";
+import { ProfileGate } from "@/components/profile-gate";
 import { QuickAdd } from "@/components/quick-add";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { StatementImport } from "@/components/statement-import";
@@ -10,10 +11,11 @@ import { useAccountSession } from "@/lib/account-session";
 import { signOutAccount } from "@/lib/account-vault";
 import { startCloudSync } from "@/lib/cloud-sync";
 import { attachLedgerForUser } from "@/lib/ledger-session";
+import { clearProfileGate, useProfile } from "@/lib/profile";
 import { useFinanceStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
-const NAV = [
+const COVE_NAV = [
   { to: "/", label: "Overview", short: "Home", icon: LayoutGrid },
   { to: "/calendar", label: "Calendar", short: "Cal", icon: CalendarDays },
   { to: "/activity", label: "Activity", short: "Log", icon: Receipt },
@@ -24,6 +26,8 @@ const NAV = [
   { to: "/reports", label: "Reports", short: "PDF", icon: FileText },
 ] as const;
 
+const DRIVE_NAV = [{ to: "/rideshare", label: "Drive desk", short: "Drive", icon: Car }] as const;
+
 function isActive(pathname: string, to: string) {
   if (to === "/") return pathname === "/";
   return pathname === to || pathname.startsWith(`${to}/`);
@@ -31,6 +35,7 @@ function isActive(pathname: string, to: string) {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const navigate = useNavigate();
   const unread = useFinanceStore((s) => s.notices.filter((n) => !n.read).length);
   const setAddOpen = useFinanceStore((s) => s.setAddOpen);
   const setImportOpen = useFinanceStore((s) => s.setImportOpen);
@@ -38,7 +43,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const cycleMode = useFinanceStore((s) => s.cycleMode);
   const setCycleMode = useFinanceStore((s) => s.setCycleMode);
   const { session } = useAccountSession();
+  const profile = useProfile((s) => s.profile);
+  const gate = useProfile((s) => s.gate);
+  const hydrate = useProfile((s) => s.hydrate);
+  const reopen = useProfile((s) => s.reopen);
   const [menu, setMenu] = useState(false);
+  const nav = profile === "rideshare" ? DRIVE_NAV : COVE_NAV;
+  const drive = profile === "rideshare";
+
+  useEffect(() => {
+    hydrate();
+  }, [hydrate]);
+
+  useEffect(() => {
+    if (gate || !drive || pathname !== "/") return;
+    void navigate({ to: "/rideshare" });
+  }, [drive, gate, pathname, navigate]);
 
   useEffect(() => {
     setMenu(false);
@@ -83,12 +103,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex items-center gap-2.5 px-5 pt-8 pb-8">
         <CoveMark />
         <div>
-          <p className="font-display text-[22px] leading-none tracking-tight">Cove</p>
-          <p className="mt-1 text-[11px] text-sidebar-muted">Quiet money</p>
+          <p className="font-display text-[22px] leading-none tracking-tight">{drive ? "Drive" : "Cove"}</p>
+          <p className="mt-1 text-[11px] text-sidebar-muted">{drive ? "Same books, gig lens" : "Quiet money"}</p>
         </div>
       </div>
       <nav className="flex flex-1 flex-col gap-0.5 px-3">
-        {NAV.map((item) => {
+        {nav.map((item) => {
           const Icon = item.icon;
           const active = isActive(pathname, item.to);
           return (
@@ -158,6 +178,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onClick={() => {
                 signOutAccount();
                 attachLedgerForUser(null);
+                clearProfileGate();
                 window.location.href = "/login";
               }}
             >
@@ -178,7 +199,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="min-h-dvh overflow-x-hidden bg-background">
+    <div className="min-h-dvh overflow-x-hidden bg-background" data-profile={drive ? "rideshare" : "cove"}>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[220px] flex-col bg-sidebar text-sidebar-foreground lg:flex">
         {sidebar}
       </aside>
@@ -215,9 +236,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Menu className="size-4" />
             </Button>
             <CoveMark dark className="lg:hidden" />
-            <span className="font-display text-lg tracking-tight lg:hidden">Cove</span>
+            <span className="font-display text-lg tracking-tight lg:hidden">{drive ? "Drive" : "Cove"}</span>
           </div>
           <div className="flex min-w-0 items-center gap-1 sm:gap-2">
+            <button
+              type="button"
+              onClick={reopen}
+              className="h-8 shrink-0 rounded-full bg-foreground px-3 text-[12px] font-medium text-background active:scale-95"
+            >
+              {drive ? "Drive" : "Cove"}
+            </button>
             <div className="flex shrink-0 rounded-lg bg-muted p-0.5">
               <button
                 type="button"
@@ -258,6 +286,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <QuickAdd />
       <SettingsDialog />
       <StatementImport />
+      <ProfileGate />
     </div>
   );
 }

@@ -45,6 +45,14 @@ export function nextBillDate(bill: Pick<RecurringBill, "dayOfMonth" | "dueDate" 
   return dt;
 }
 
+export function billDueIso(bill: Pick<RecurringBill, "dayOfMonth" | "dueDate" | "repeat">, from = todayISO()) {
+  return isoDate(nextBillDate(bill, from));
+}
+
+export function isBillPaid(bill: RecurringBill, from = todayISO()) {
+  return Boolean(bill.paidThrough) && bill.paidThrough === billDueIso(bill, from);
+}
+
 export function daysUntil(date: Date, from = todayISO()) {
   const [y, m, d] = from.split("-").map(Number);
   const today = new Date(y, m - 1, d);
@@ -105,7 +113,7 @@ export function buildNotices(
     }
   }
 
-  for (const bill of bills.filter((b) => b.enabled)) {
+  for (const bill of bills.filter((b) => b.enabled && !isBillPaid(b))) {
     const due = nextBillDate(bill);
     const days = daysUntil(due);
     const dueIso = isoDate(due);

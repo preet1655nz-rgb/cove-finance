@@ -1,5 +1,7 @@
 export type TxType = "income" | "expense";
 
+export type GigScope = "include" | "exclude";
+
 export type TransferLeg = {
   direction: "in" | "out";
   otherAccountId?: string;
@@ -19,6 +21,8 @@ export type Transaction = {
   counterparty?: string;
   transfer?: TransferLeg;
   reviewed?: boolean;
+  /** Lens only. Absent means Drive classifies the row itself. */
+  gigScope?: GigScope;
 };
 
 export type BankAccount = {
@@ -63,6 +67,8 @@ export type RecurringBill = {
   dueDate?: string;
   repeat?: "weekly" | "fortnightly" | "monthly" | "once";
   enabled: boolean;
+  /** ISO date of the occurrence that has been marked paid. */
+  paidThrough?: string;
 };
 
 export type CustomCategory = {
@@ -84,6 +90,17 @@ export type Notice = {
   fingerprint: string;
 };
 
+export type VehicleKind = "petrol" | "diesel" | "hybrid" | "electric";
+
+export type RideshareSettings = {
+  method: "actual" | "kilometre";
+  vehicle: VehicleKind;
+  /** Logbook business-use share. Null until the driver confirms it. */
+  businessPct: number | null;
+  /** Total kilometres this tax year, business and private together. */
+  totalKm: number | null;
+};
+
 export type Settings = {
   displayName: string;
   currency: string;
@@ -92,6 +109,7 @@ export type Settings = {
   customFrom?: string;
   customTo?: string;
   homeWidget?: boolean;
+  rideshare?: RideshareSettings;
 };
 
 export type Period = "this-week" | "fortnight" | "this-month" | "last-month" | "quarter" | "year" | "all" | "custom";

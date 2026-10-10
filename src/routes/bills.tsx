@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Bell, Plus } from "lucide-react";
+import { Bell, Check, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { PageFrame } from "@/components/page-frame";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { allCategories, getCategory } from "@/lib/categories";
 import { formatDayLong, money } from "@/lib/format";
-import { daysUntil, nextBillDate } from "@/lib/notify";
+import { daysUntil, isBillPaid, nextBillDate } from "@/lib/notify";
 import { useFinanceStore } from "@/lib/store";
 import type { RecurringBill } from "@/lib/types";
 import { isoDate, todayISO } from "@/lib/utils";
@@ -49,7 +49,7 @@ function Bills() {
       .sort((a, b) => a.due.localeCompare(b.due) || a.bill.name.localeCompare(b.bill.name));
   }, [bills]);
 
-  const dueSoon = rows.filter((r) => r.bill.enabled && r.days <= 3);
+  const dueSoon = rows.filter((r) => r.bill.enabled && !isBillPaid(r.bill) && r.days <= 3);
 
   function startNew() {
     setEditing(null);
@@ -100,7 +100,7 @@ function Bills() {
     <div className="space-y-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-[13px] text-muted-foreground">Due dates you enter. Reminders for the three days before.</p>
+          <p className="text-[13px] text-muted-foreground">Tap the circle when it is paid. Cove stays quiet until the next due date.</p>
           <h1 className="mt-1 font-display text-3xl tracking-tight">Bills</h1>
         </div>
         <Button onClick={startNew}>
@@ -132,25 +132,35 @@ function Bills() {
         </section>
       ) : null}
 
-      <section className="space-y-3">
+      <section className="overflow-hidden rounded-2xl bg-card shadow-card">
         {rows.length === 0 ? (
-          <p className="rounded-xl bg-card px-5 py-12 text-center text-sm text-muted-foreground shadow-card">
+          <p className="px-5 py-12 text-center text-sm text-muted-foreground">
             Add rent, power, fibre — anything with a due date. Cove will ping you each of the three days before.
           </p>
         ) : (
-          rows.map(({ bill, due, days }) => {
-            const cat = getCategory(bill.categoryId);
-            return (
-              <article key={bill.id} className="flex flex-col gap-3 rounded-xl bg-card p-4 shadow-card sm:flex-row sm:items-center">
-                <button type="button" className="min-w-0 flex-1 text-left" onClick={() => startEdit(bill)}>
-                  <p className="text-sm font-medium">{bill.name}</p>
-                  <p className="text-[12px] text-muted-foreground">
-                    {cat.name} · {bill.repeat === "once" ? "Once" : bill.repeat === "weekly" ? "Weekly" : bill.repeat === "fortnightly" ? "Fortnightly" : "Monthly"} · {formatDayLong(due)}
-                    {days <= 3 && bill.enabled ? ` · ${days < 0 ? "overdue" : days === 0 ? "today" : `${days}d`}` : ""}
-                  </p>
-                </button>
-                <p className="text-sm font-medium tabular-nums">{money(bill.amount, currency)}</p>
-                <div className="flex items-center gap-3">
+          <ul className="divide-y divide-border/70">
+            {rows.map(({ bill, due, days }) => {
+              const cat = getCategory(bill.categoryId);
+              const paid = isBillPaid(bill);
+              return (
+                <li key={bill.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                  <button
+                    type="button"
+                    aria-pressed={paid}
+                    aria-label={paid ? `Mark ${bill.name} unpaid` : `Mark ${bill.name} paid`}
+                    onClick={() => upsertBill({ ...bill, paidThrough: paid ? undefined : due })}
+                    className={`grid size-7 shrink-0 place-items-center rounded-full border transition-transform duration-150 active:scale-95 ${paid ? "border-transparent bg-foreground text-background" : "border-border bg-background"}`}
+                  >
+                    {paid ? <Check className="size-3.5" strokeWidth={2.5} /> : null}
+                  </button>
+                  <button type="button" className="min-w-0 flex-1 text-left" onClick={() => startEdit(bill)}>
+                    <p className={`text-sm font-medium ${paid ? "text-muted-foreground line-through" : ""}`}>{bill.name}</p>
+                    <p className="text-[12px] text-muted-foreground">
+                      {paid ? "Paid" : cat.name} · {bill.repeat === "once" ? "Once" : bill.repeat === "weekly" ? "Weekly" : bill.repeat === "fortnightly" ? "Fortnightly" : "Monthly"} · {formatDayLong(due)}
+                      {!paid && days <= 3 && bill.enabled ? ` · ${days < 0 ? "overdue" : days === 0 ? "today" : `${days}d`}` : ""}
+                    </p>
+                  </button>
+                  <p className={`text-sm font-medium tabular-nums ${paid ? "text-muted-foreground" : ""}`}>{money(bill.amount, currency)}</p>
                   <Switch
                     checked={bill.enabled}
                     onCheckedChange={(enabled) => upsertBill({ ...bill, enabled })}
@@ -159,10 +169,10 @@ function Bills() {
                   <Button variant="ghost" size="sm" onClick={() => removeBill(bill.id)}>
                     Remove
                   </Button>
-                </div>
-              </article>
-            );
-          })
+                </li>
+              );
+            })}
+          </ul>
         )}
       </section>
 
