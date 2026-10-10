@@ -167,57 +167,54 @@ function Desk({
 }) {
   const empty = slice.length === 0;
   return (
-    <div className="space-y-4">
-      <section className="rounded-[24px] bg-foreground px-5 py-5 text-background">
-        <p className="text-[12px] text-background/70">{label} · driving surplus</p>
-        <p className="mt-1 font-display text-4xl tracking-tight tabular-nums">{money(profit, currency)}</p>
-        <p className="mt-2 max-w-md text-[13px] leading-relaxed text-background/75">
-          Gig income, minus platform fees
-          {actualClaim == null ? " and recorded running costs" : ` and ${businessPct}% of running costs`}. This is a planning figure, not an IR3.
+    <div className="space-y-10">
+      <section>
+        <p className="font-display text-5xl tracking-tight tabular-nums">{money(profit, currency)}</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Surplus · {label.toLowerCase()}
+          {actualClaim == null ? "" : ` · ${businessPct}% of running costs`}
         </p>
       </section>
 
-      <section className="grid grid-cols-2 gap-3">
-        <Stat label="Uber, Didi & gig" value={money(income, currency)} />
-        <Stat label="Platform fees" value={money(fees, currency)} />
-        <Stat label="Vehicle costs" value={money(vehicle, currency)} />
-        <Stat label="Phone & data" value={money(phone, currency)} />
+      <section className="grid grid-cols-2 gap-x-6 gap-y-5 border-y border-border py-5 sm:grid-cols-4">
+        <Stat label="Gig income" value={money(income, currency)} />
+        <Stat label="Fees" value={money(fees, currency)} />
+        <Stat label="Vehicle" value={money(vehicle, currency)} />
+        <Stat label="Phone" value={money(phone, currency)} />
       </section>
 
       {yearIncome >= GST_REGISTER_TURNOVER * 0.8 ? (
-        <p className="rounded-2xl bg-card px-4 py-3 text-[13px] leading-relaxed text-muted-foreground shadow-card">
-          Gig income over the last 12 months is {money(yearIncome, currency)}. GST registration is compulsory once turnover passes {money(GST_REGISTER_TURNOVER, currency)} in a rolling year.
+        <p className="text-sm text-muted-foreground">
+          Last 12 months of gig income is {money(yearIncome, currency)}. GST registration is compulsory past {money(GST_REGISTER_TURNOVER, currency)}.
         </p>
       ) : null}
 
       {empty ? (
-        <div className="rounded-[24px] bg-card px-5 py-8 text-center shadow-card">
+        <div className="py-6">
           <p className="text-sm font-medium">No driving rows in this period</p>
-          <p className="mx-auto mt-2 max-w-sm text-[13px] leading-relaxed text-muted-foreground">
-            Log Uber or Didi pay as Gig work, and fuel, WOF, rego, repairs, parking, tolls or car insurance as usual. Drive finds them. Fines stay out — Inland Revenue does not allow them.
+          <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+            Log Uber or Didi pay as Gig work, and fuel, WOF, rego, repairs, parking, tolls or insurance as usual. Fines stay out.
           </p>
           <Button className="mt-4" onClick={onAdd}>
-            Add a row in Cove
+            Add a row
           </Button>
         </div>
       ) : (
         <>
-          <section className="grid gap-4 lg:grid-cols-2">
-            <div className="rounded-[24px] bg-card p-4 shadow-card">
-              <h2 className="px-1 text-sm font-medium">Cash flow</h2>
-              <FlowChart txs={slice} currency={currency} />
-            </div>
-            <div className="rounded-[24px] bg-card p-4 shadow-card">
-              <h2 className="px-1 text-sm font-medium">Where costs sit</h2>
-              <CategoryDonut txs={slice.filter((t) => t.type === "expense")} currency={currency} />
-            </div>
+          <section className="rounded-2xl bg-card p-4 shadow-card sm:p-6">
+            <h2 className="mb-4 text-sm font-medium">Cash flow</h2>
+            <FlowChart txs={slice} currency={currency} />
+          </section>
+          <section className="rounded-2xl bg-card p-4 shadow-card sm:p-6">
+            <h2 className="mb-2 text-sm font-medium">Where costs sit</h2>
+            <CategoryDonut txs={slice.filter((t) => t.type === "expense")} currency={currency} />
           </section>
           {platforms.length ? (
-            <section className="overflow-hidden rounded-[24px] bg-card shadow-card">
-              <h2 className="px-4 pt-4 text-sm font-medium">Income by platform</h2>
-              <ul className="mt-2 divide-y divide-border/70">
+            <section>
+              <h2 className="mb-1 text-sm font-medium">By platform</h2>
+              <ul>
                 {platforms.map((row) => (
-                  <li key={row.name} className="flex items-center justify-between px-4 py-3 text-sm">
+                  <li key={row.name} className="flex items-center justify-between border-b border-border py-3 text-sm last:border-0">
                     <span>{row.name}</span>
                     <span className="tabular-nums">{money(row.amount, currency)}</span>
                   </li>
@@ -233,9 +230,9 @@ function Desk({
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[20px] bg-card px-4 py-3 shadow-card">
-      <p className="text-[12px] text-muted-foreground">{label}</p>
-      <p className="mt-1 text-lg font-medium tabular-nums tracking-tight">{value}</p>
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-medium tabular-nums">{value}</p>
     </div>
   );
 }

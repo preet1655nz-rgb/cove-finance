@@ -7,21 +7,18 @@ const OPTIONS: {
   id: ProfileId;
   title: string;
   kicker: string;
-  body: string;
   icon: typeof Wallet;
 }[] = [
   {
     id: "cove",
     title: "Cove",
     kicker: "Everyday money",
-    body: "Income, bills, budgets and the full ledger. This stays the source of truth.",
     icon: Wallet,
   },
   {
     id: "rideshare",
     title: "Drive",
     kicker: "Rideshare books",
-    body: "Uber and Didi income, plus vehicle costs Inland Revenue allows. Read from Cove — nothing is copied.",
     icon: Car,
   },
 ];
@@ -39,11 +36,11 @@ export function ProfileGate() {
   }
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-foreground/35 px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] backdrop-blur-md sm:items-center">
-      <div className="w-full max-w-[420px] rounded-[28px] bg-background p-5 shadow-card">
-        <p className="text-[13px] text-muted-foreground">Same login. Two desks.</p>
-        <h2 className="mt-1 font-display text-[28px] leading-none tracking-tight">Open a profile</h2>
-        <div className="mt-5 flex flex-col gap-3">
+    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-foreground/30 px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:items-center">
+      <div className="w-full max-w-sm rounded-3xl bg-background p-5 shadow-card">
+        <h2 className="font-display text-3xl tracking-tight">Which desk?</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Same books. Pick a view.</p>
+        <div className="mt-5 flex flex-col gap-2">
           {OPTIONS.map((option) => {
             const Icon = option.icon;
             const selected = profile === option.id;
@@ -53,21 +50,16 @@ export function ProfileGate() {
                 type="button"
                 onClick={() => pick(option.id)}
                 className={cn(
-                  "flex items-start gap-3 rounded-[22px] bg-card p-4 text-left shadow-card transition-transform duration-150 active:scale-[0.98]",
-                  selected && "ring-1 ring-foreground",
+                  "flex items-center gap-3 rounded-2xl px-3 py-3 text-left active:scale-[0.98]",
+                  selected ? "bg-foreground text-background" : "bg-card shadow-card",
                 )}
               >
-                <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-foreground text-background">
-                  <Icon className="size-5" strokeWidth={1.75} />
-                </span>
+                <Icon className="size-5 shrink-0" strokeWidth={1.75} />
                 <span className="min-w-0 flex-1">
-                  <span className="flex items-center justify-between gap-2">
-                    <span className="text-[15px] font-medium">{option.title}</span>
-                    {selected ? <Check className="size-4" /> : null}
-                  </span>
-                  <span className="mt-0.5 block text-[12px] text-muted-foreground">{option.kicker}</span>
-                  <span className="mt-1.5 block text-[13px] leading-snug text-muted-foreground">{option.body}</span>
+                  <span className="block text-sm font-medium">{option.title}</span>
+                  <span className={cn("mt-0.5 block text-xs", selected ? "text-background/70" : "text-muted-foreground")}>{option.kicker}</span>
                 </span>
+                {selected ? <Check className="size-4" /> : null}
               </button>
             );
           })}

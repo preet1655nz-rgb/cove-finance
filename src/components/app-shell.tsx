@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Bell, CalendarDays, Car, FileText, Globe, LayoutGrid, ListChecks, Menu, PieChart, Plus, Receipt, Settings, Wallet, X } from "lucide-react";
+import { Bell, CalendarDays, Car, FileText, LayoutGrid, ListChecks, MoreHorizontal, PieChart, Plus, Receipt, Settings, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NotificationCenter } from "@/components/notification-center";
 import { ProfileGate } from "@/components/profile-gate";
@@ -15,18 +15,19 @@ import { clearProfileGate, useProfile } from "@/lib/profile";
 import { useFinanceStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
-const COVE_NAV = [
-  { to: "/", label: "Overview", short: "Home", icon: LayoutGrid },
-  { to: "/calendar", label: "Calendar", short: "Cal", icon: CalendarDays },
-  { to: "/activity", label: "Activity", short: "Log", icon: Receipt },
-  { to: "/reconcile", label: "Reconcile", short: "Match", icon: ListChecks },
-  { to: "/bills", label: "Bills", short: "Bills", icon: Bell },
-  { to: "/budgets", label: "Budgets", short: "Caps", icon: Wallet },
-  { to: "/insights", label: "Insights", short: "Stats", icon: PieChart },
-  { to: "/reports", label: "Reports", short: "PDF", icon: FileText },
+const PRIMARY = [
+  { to: "/", label: "Home", icon: LayoutGrid },
+  { to: "/activity", label: "Activity", icon: Receipt },
+  { to: "/bills", label: "Bills", icon: Bell },
+  { to: "/insights", label: "Insights", icon: PieChart },
 ] as const;
 
-const DRIVE_NAV = [{ to: "/rideshare", label: "Drive desk", short: "Drive", icon: Car }] as const;
+const MORE = [
+  { to: "/calendar", label: "Calendar", icon: CalendarDays },
+  { to: "/reconcile", label: "Reconcile", icon: ListChecks },
+  { to: "/budgets", label: "Budgets", icon: Wallet },
+  { to: "/reports", label: "Reports", icon: FileText },
+] as const;
 
 function isActive(pathname: string, to: string) {
   if (to === "/") return pathname === "/";
@@ -47,8 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const gate = useProfile((s) => s.gate);
   const hydrate = useProfile((s) => s.hydrate);
   const reopen = useProfile((s) => s.reopen);
-  const [menu, setMenu] = useState(false);
-  const nav = profile === "rideshare" ? DRIVE_NAV : COVE_NAV;
+  const [more, setMore] = useState(false);
   const drive = profile === "rideshare";
 
   useEffect(() => {
@@ -61,7 +61,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [drive, gate, pathname, navigate]);
 
   useEffect(() => {
-    setMenu(false);
+    setMore(false);
   }, [pathname]);
 
   useEffect(() => {
@@ -77,7 +77,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         e.preventDefault();
         setAddOpen(true);
       }
-      if (e.key === "Escape") setMenu(false);
+      if (e.key === "Escape") setMore(false);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -98,190 +98,149 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const sidebar = (
-    <>
-      <div className="flex items-center gap-2.5 px-5 pt-8 pb-8">
-        <CoveMark />
-        <div>
-          <p className="font-display text-[22px] leading-none tracking-tight">{drive ? "Drive" : "Cove"}</p>
-          <p className="mt-1 text-[11px] text-sidebar-muted">{drive ? "Same books, gig lens" : "Quiet money"}</p>
-        </div>
-      </div>
-      <nav className="flex flex-1 flex-col gap-0.5 px-3">
-        {nav.map((item) => {
-          const Icon = item.icon;
-          const active = isActive(pathname, item.to);
-          return (
-            <Link
-              key={item.to}
-              to={item.to}
-              onClick={() => setMenu(false)}
-              className={cn(
-                "flex h-11 items-center gap-3 rounded-md px-3 text-sm transition-colors duration-150",
-                active
-                  ? "bg-sidebar-foreground/10 text-sidebar-foreground"
-                  : "text-sidebar-muted hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground",
-              )}
-            >
-              <Icon className="size-4" strokeWidth={1.75} />
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-      <div className="space-y-2 p-4">
-        <div className="flex items-center justify-between px-1 pb-1">
-          <span className="text-[11px] text-sidebar-muted">
-            {unread > 0 ? `${unread} notice${unread === 1 ? "" : "s"}` : "All quiet"}
-          </span>
-          <NotificationCenter light />
-        </div>
-        <Button
-          className="w-full bg-sidebar-foreground text-sidebar hover:bg-sidebar-foreground/90"
-          onClick={() => {
-            setMenu(false);
-            setAddOpen(true);
-          }}
-        >
-          <Plus className="size-4" />
-          Add
-        </Button>
-        <Button
-          variant="ghost"
-          className="w-full text-sidebar-muted hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground"
-          onClick={() => {
-            setMenu(false);
-            setImportOpen(true);
-          }}
-        >
-          <Receipt className="size-4" />
-          Statement
-        </Button>
-        <Button
-          variant="ghost"
-          className="w-full text-sidebar-muted hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground"
-          onClick={() => {
-            setMenu(false);
-            setSettingsOpen(true);
-          }}
-        >
-          <Settings className="size-4" />
-          Settings
-        </Button>
-        {session ? (
-          <div className="rounded-md bg-sidebar-foreground/10 px-3 py-2">
-            <p className="truncate text-[12px] text-sidebar-foreground">{session.name}</p>
-            <p className="truncate text-[11px] text-sidebar-muted">{session.email}</p>
-            <button
-              type="button"
-              className="mt-1 text-[11px] text-sidebar-muted underline-offset-4 hover:underline"
-              onClick={() => {
-                signOutAccount();
-                attachLedgerForUser(null);
-                clearProfileGate();
-                window.location.href = "/login";
-              }}
-            >
-              Sign out
-            </button>
-          </div>
-        ) : null}
-        <Link
-          to="/welcome"
-          onClick={() => setMenu(false)}
-          className="flex h-10 items-center justify-center gap-2 rounded-md text-sm text-sidebar-muted hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground"
-        >
-          <Globe className="size-4" strokeWidth={1.75} />
-          Website
-        </Link>
-      </div>
-    </>
-  );
+  const moreOpen = more || MORE.some((item) => isActive(pathname, item.to));
 
   return (
     <div className="min-h-dvh overflow-x-hidden bg-background" data-profile={drive ? "rideshare" : "cove"}>
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[220px] flex-col bg-sidebar text-sidebar-foreground lg:flex">
-        {sidebar}
-      </aside>
+      <header className="sticky top-0 z-30 border-b border-border">
+        <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-3 px-4 sm:px-6">
+          <button type="button" onClick={reopen} className="flex shrink-0 items-center gap-2" aria-label="Switch profile">
+            <CoveMark />
+            <span className="font-display text-lg tracking-tight">{drive ? "Drive" : "Cove"}</span>
+          </button>
 
-      {menu ? (
-        <button
-          type="button"
-          className="fixed inset-0 z-40 bg-foreground/40 lg:hidden"
-          aria-label="Close menu"
-          onClick={() => setMenu(false)}
-        />
-      ) : null}
-      <aside
-        className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-[min(240px,88vw)] flex-col bg-sidebar text-sidebar-foreground shadow-card transition-transform duration-200 lg:hidden",
-          menu ? "translate-x-0" : "-translate-x-full",
-        )}
-      >
-        <button
-          type="button"
-          className="absolute top-4 right-3 flex size-9 items-center justify-center rounded-md text-sidebar-muted hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground"
-          onClick={() => setMenu(false)}
-          aria-label="Close menu"
-        >
-          <X className="size-4" />
-        </button>
-        {sidebar}
-      </aside>
-
-      <header className="sticky top-0 z-20 border-b border-border/70 bg-background/80 backdrop-blur-md">
-        <div className="flex h-14 items-center justify-between gap-3 px-4 lg:pl-[236px] lg:pr-6">
-          <div className="flex min-w-0 items-center gap-2">
-            <Button variant="ghost" size="icon-sm" className="lg:hidden" onClick={() => setMenu(true)} aria-label="Open menu">
-              <Menu className="size-4" />
-            </Button>
-            <CoveMark dark className="lg:hidden" />
-            <span className="font-display text-lg tracking-tight lg:hidden">{drive ? "Drive" : "Cove"}</span>
-          </div>
-          <div className="flex min-w-0 items-center gap-1 sm:gap-2">
+          <nav className="ml-4 hidden items-center gap-1 md:flex">
+            {(drive ? [{ to: "/rideshare", label: "Desk", icon: Car }] : PRIMARY).map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={cn(
+                  "rounded-full px-3 py-1.5 text-sm transition-colors duration-150",
+                  isActive(pathname, item.to) ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {item.label}
+              </Link>
+            ))}
             <button
               type="button"
-              onClick={reopen}
-              className="h-8 shrink-0 rounded-full bg-foreground px-3 text-[12px] font-medium text-background active:scale-95"
+              onClick={() => setMore((v) => !v)}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-sm transition-colors duration-150",
+                more || (!drive && moreOpen) ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
+              )}
             >
-              {drive ? "Drive" : "Cove"}
+              More
             </button>
-            <div className="flex shrink-0 rounded-lg bg-muted p-0.5">
+          </nav>
+
+          <div className="ml-auto flex items-center gap-1.5">
+            <div className="mr-1 hidden rounded-full bg-muted p-0.5 sm:flex">
               <button
                 type="button"
                 onClick={() => setCycleMode(false)}
                 className={cn(
-                  "h-8 rounded-md px-2 text-[12px] font-medium sm:px-3",
+                  "h-7 rounded-full px-2.5 text-xs",
                   !cycleMode ? "bg-card text-foreground shadow-card" : "text-muted-foreground",
                 )}
               >
-                Calendar
+                Dates
               </button>
               <button
                 type="button"
                 onClick={() => setCycleMode(true)}
                 className={cn(
-                  "h-8 rounded-md px-2 text-[12px] font-medium sm:px-3",
+                  "h-7 rounded-full px-2.5 text-xs",
                   cycleMode ? "bg-card text-foreground shadow-card" : "text-muted-foreground",
                 )}
               >
-                Pay cycle
+                Cycle
               </button>
             </div>
             <NotificationCenter />
-            <Button variant="ghost" size="icon-sm" className="hidden sm:inline-flex lg:hidden" onClick={() => setSettingsOpen(true)} aria-label="Settings">
-              <Settings className="size-4" />
-            </Button>
-            <Button size="icon-sm" className="lg:hidden" onClick={() => setAddOpen(true)} aria-label="Add">
+            <Button size="sm" className="h-8 rounded-full px-3" onClick={() => setAddOpen(true)}>
               <Plus className="size-4" />
+              <span className="hidden sm:inline">Add</span>
             </Button>
           </div>
         </div>
       </header>
 
-      <div className="lg:pl-[220px]">
-        <main className="mx-auto w-full max-w-[1120px] min-w-0 px-4 pt-6 pb-16 lg:px-6 lg:pt-8">{children}</main>
-      </div>
+      {more ? (
+        <>
+          <button type="button" className="fixed inset-0 z-40 bg-foreground/20" aria-label="Close menu" onClick={() => setMore(false)} />
+          <div className="fixed top-16 left-1/2 z-50 w-[min(22rem,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl bg-card p-2 shadow-card">
+            {!drive ? (
+              <div className="grid grid-cols-2 gap-1">
+                {MORE.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      className={cn(
+                        "flex h-11 items-center gap-2 rounded-xl px-3 text-sm",
+                        isActive(pathname, item.to) ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      )}
+                    >
+                      <Icon className="size-4" strokeWidth={1.75} />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : null}
+            <div className="mt-1 grid grid-cols-2 gap-1 border-t border-border pt-1">
+              <button type="button" className="flex h-11 items-center gap-2 rounded-xl px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => { setMore(false); setImportOpen(true); }}>
+                <Receipt className="size-4" /> Statement
+              </button>
+              <button type="button" className="flex h-11 items-center gap-2 rounded-xl px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => { setMore(false); setSettingsOpen(true); }}>
+                <Settings className="size-4" /> Settings
+              </button>
+              <Link to="/welcome" className="flex h-11 items-center gap-2 rounded-xl px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => setMore(false)}>
+                Website
+              </Link>
+              {session ? (
+                <button
+                  type="button"
+                  className="flex h-11 items-center gap-2 rounded-xl px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                  onClick={() => {
+                    signOutAccount();
+                    attachLedgerForUser(null);
+                    clearProfileGate();
+                    window.location.href = "/login";
+                  }}
+                >
+                  Sign out
+                </button>
+              ) : null}
+            </div>
+            {session ? <p className="truncate px-3 py-2 text-xs text-muted-foreground">{session.email}</p> : null}
+            {unread > 0 ? <p className="px-3 pb-2 text-xs text-muted-foreground">{unread} unread notice{unread === 1 ? "" : "s"}</p> : null}
+          </div>
+        </>
+      ) : null}
+
+      <main className="mx-auto w-full max-w-5xl min-w-0 px-4 pt-8 pb-24 sm:px-6 sm:pt-10">{children}</main>
+
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden">
+        <div className={cn("mx-auto grid h-14 max-w-lg", drive ? "grid-cols-2" : "grid-cols-5")}>
+          {(drive ? [{ to: "/rideshare", label: "Desk", icon: Car }] : PRIMARY).map((item) => {
+            const Icon = item.icon;
+            const active = isActive(pathname, item.to);
+            return (
+              <Link key={item.to} to={item.to} className={cn("flex flex-col items-center justify-center gap-0.5 text-[11px]", active ? "text-foreground" : "text-muted-foreground")}>
+                <Icon className="size-5" strokeWidth={active ? 2.25 : 1.75} />
+                {item.label}
+              </Link>
+            );
+          })}
+          <button type="button" onClick={() => setMore(true)} className={cn("flex flex-col items-center justify-center gap-0.5 text-[11px]", more ? "text-foreground" : "text-muted-foreground")}>
+            <MoreHorizontal className="size-5" strokeWidth={1.75} />
+            More
+          </button>
+        </div>
+      </nav>
 
       <QuickAdd />
       <SettingsDialog />
@@ -291,17 +250,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function CoveMark({ dark = false, className }: { dark?: boolean; className?: string }) {
+function CoveMark() {
   return (
-    <span
-      className={cn(
-        "flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-sm",
-        dark ? "bg-foreground" : "bg-sidebar-foreground/10",
-        className,
-      )}
-      aria-hidden
-    >
-      <img src="/cove-mark.png" alt="" className="size-8 object-cover" width={32} height={32} />
+    <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-foreground" aria-hidden>
+      <img src="/cove-mark.png" alt="" className="size-7 object-cover" width={28} height={28} />
     </span>
   );
 }
