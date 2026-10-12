@@ -65,7 +65,7 @@ export const CATEGORIES: Category[] = [
   { id: "education", name: "Education", type: "expense", icon: GraduationCap, tint: "var(--color-chart-3)" },
   { id: "drinks", name: "Cafes", type: "expense", icon: Wine, tint: "var(--color-chart-5)" },
   { id: "tax", name: "Tax", type: "expense", icon: Scale, tint: "var(--color-chart-2)" },
-  { id: "credit-card", name: "Credit card", type: "expense", icon: CreditCard, tint: "var(--color-chart-3)" },
+  { id: "credit-card", name: "Card payoff", type: "expense", icon: CreditCard, tint: "var(--color-chart-3)" },
   { id: "debt", name: "Debt", type: "expense", icon: CircleDollarSign, tint: "var(--color-expense)" },
   { id: "investing", name: "Investing", type: "expense", icon: TrendingUp, tint: "var(--color-income)" },
   { id: "savings", name: "Savings", type: "expense", icon: Landmark, tint: "var(--color-income)" },

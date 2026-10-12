@@ -95,7 +95,11 @@ function Dashboard() {
         <Stat label="Savings" value={money(b.savings, currency, true)} />
       </section>
 
-      {cashStory.negative && cashStory.message ? <p className="text-sm text-expense">{cashStory.message}</p> : null}
+      {b.credit > 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Card payoff {money(b.credit, currency)} left the bank to clear the card. It is not counted again as living. The shops on the card statement are the expenses.
+        </p>
+      ) : null}
       {openRec ? (
         <p className="-mt-6 text-sm">
           <Link to="/reconcile" className="text-foreground underline-offset-4 hover:underline">

@@ -1,4 +1,5 @@
 import { allCategories, getCategory, isTransferCategory } from "./categories";
+import { looksLikeCardPayment, looksLikeCardPayoffReceived } from "./statement-direction";
 import type { BankAccount, MemoryRule, Transaction, TransferLeg, TxType } from "./types";
 import { uid } from "./utils";
 
@@ -156,6 +157,17 @@ export function classifyNote(
       if (rule.categoryId === "investing" && type === "expense") return { categoryId: "investing", counterparty };
       if (rule.categoryId === "investments" && type === "income") return { categoryId: "investments", counterparty };
     }
+  }
+
+  if (type === "expense" && looksLikeCardPayment(note)) {
+    return { categoryId: "credit-card", counterparty: "Credit card" };
+  }
+  if (type === "income" && looksLikeCardPayoffReceived(note)) {
+    return {
+      categoryId: "transfer-in",
+      transfer: { direction: "in", otherLabel: "Credit card payment" },
+      counterparty: "Credit card",
+    };
   }
 
   const own = OWN_ACCOUNT_HINTS.find((h) => h.re.test(note));

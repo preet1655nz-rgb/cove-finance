@@ -29,7 +29,16 @@ export function looksLikeSavings(note: string) {
 }
 
 export function looksLikeCardPayment(note: string) {
-  return /\b9554[-\s*]|\bgem visa\b|\bgemvisa\b/i.test(note);
+  if (/\b(visa purchase|eftpos|point of sale)\b/i.test(note) && !/\bgem visa\b/i.test(note)) return false;
+  return /\b9554[-\s*]|\bgem visa\b|\bgemvisa\b|\b(visa|mastercard|master card|credit card|anz visa)\b.{0,30}\b(payment|pmt|repay|autopay)\b|\b(payment|pmt|repay|autopay)\b.{0,30}\b(visa|mastercard|master card|credit card)\b|\b(card repayment|credit card payment)\b/i.test(
+    note,
+  );
+}
+
+/** Money arriving on the card statement to clear the balance. Not income. */
+export function looksLikeCardPayoffReceived(note: string) {
+  if (/\b(salary|wage|uber|didi|interest|dividend|refund)\b/i.test(note)) return false;
+  return /\b(payment thank you|autopay payment|payment received)\b/i.test(note);
 }
 
 export function looksLikeReversal(note: string) {

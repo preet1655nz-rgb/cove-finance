@@ -129,6 +129,13 @@ test("debt payments are debt, not living", () => {
   assert.equal(classifyNote("DD personal loan", "expense").categoryId, "debt");
 });
 
+test("card payoff is not a second living expense", () => {
+  assert.equal(classifyNote("DD 9554-0104-1146-0702 DEBIT TRANSFER 134035", "expense").categoryId, "credit-card");
+  assert.equal(classifyNote("AP ANZ VISA PAYMENT", "expense").categoryId, "credit-card");
+  assert.equal(classifyNote("Visa purchase, COUNTDOWN GREY LYNN", "expense").categoryId, "groceries");
+  assert.equal(classifyNote("PAYMENT THANK YOU", "income").categoryId, "transfer-in");
+});
+
 test("nz merchants and past shops fill the blank category", () => {
   assert.equal(classifyNote("VT CHEMIST WAREHOUSE QUEEN", "expense").categoryId, "health");
   assert.equal(classifyNote("VTNZ MANUKAU WOF", "expense").categoryId, "vehicle");

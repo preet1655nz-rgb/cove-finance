@@ -115,6 +115,12 @@ export function StatementImport() {
         `${hidden} look like transfers or credits from another of your accounts. They are unchecked — tick any you still want in the books.`,
       );
     }
+    const cardPay = reviewed.filter((r) => r.categoryId === "credit-card").length;
+    if (cardPay) {
+      nextWarnings.push(
+        `${cardPay} ${cardPay === 1 ? "payment pays" : "payments pay"} the card off from this account. That is not living spend. Upload the card statement for the actual shops.`,
+      );
+    }
     setWarnings(nextWarnings);
     const inferred = inferAccountMeta(result.format, result.format, result.rows.map((r) => r.note));
     const existing = useFinanceStore.getState().accounts.find((a) => a.bank === inferred.bank);
@@ -417,6 +423,7 @@ export function StatementImport() {
                         {prettyPayee(row.note).toLowerCase() !== row.note.trim().toLowerCase() ? ` · ${row.note}` : ""}
                         {row.duplicate ? " · already in Cove" : ""}
                         {row.skipReason === "transfer" ? " · transfer" : ""}
+                        {row.categoryId === "credit-card" ? " · pays the card, not a second expense" : ""}
                         {row.categoryId === "other" || row.categoryId === "other-income" ? " · pick a category" : ""}
                       </p>
                     </div>
