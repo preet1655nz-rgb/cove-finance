@@ -33,6 +33,14 @@ export const BUILTIN_RULES: { re: RegExp; id: string }[] = [
   { re: /\b(cinema|event cinemas|ticketmaster|concert|academy cinema|aotea)\b/i, id: "entertainment" },
   { re: /\b(university|course|udemy|workbook|tuition)\b/i, id: "education" },
   { re: /\b(kiwisaver|emergency fund)\b|wstpac sav|westpac sav/i, id: "savings" },
+  { re: /\b(wof|vtnz|aa vehicle testing|vehicle inspection)\b/i, id: "vehicle" },
+  { re: /\b(chemist warehouse|unichem|life pharmacy|bargain chemist)\b/i, id: "health" },
+  { re: /\b(noel leeming|jb hi-?fi|harvey norman|pb tech|mighty ape|the warehouse)\b/i, id: "shopping" },
+  { re: /\b(trade ?me|trademe)\b/i, id: "shopping" },
+  { re: /\b(neon|sky tv|sky sport|disney\+|xbox|playstation|steam games)\b/i, id: "subscriptions" },
+  { re: /\b(hell pizza|burger fuel|nando'?s?|gong cha|st pierre)\b/i, id: "dining" },
+  { re: /\b(moore wilson|raeward|bin inn|mad butcher|supervalue|night '?n'? day)\b/i, id: "groceries" },
+  { re: /\b(studylink|study link|work and income|winz)\b/i, id: "other-income" },
 ];
 
 
@@ -71,6 +79,49 @@ export function prettyPayee(note: string) {
     .trim();
   if (!cleaned) return note.trim() || "Unknown";
   return cleaned.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export function merchantKey(note: string) {
+  const cleaned = note
+    .toLowerCase()
+    .replace(/^(dd|dc|bp|ap|vt|ep|at|cq|ed|fx|ia|ip|if|tp|dr)\s+/, "")
+    .replace(/\b(visa purchase|direct debit|direct credit|automatic payment|bill payment|eftpos|debit transfer|credit transfer)\b/g, " ")
+    .replace(/[^a-z0-9&]+/g, " ")
+    .replace(/\b\d+\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const words = cleaned.split(" ").filter(Boolean);
+  while (words.length && words[words.length - 1].length < 2) words.pop();
+  return words.slice(0, 4).join(" ");
+}
+
+export function sameMerchant(a: string, b: string) {
+  if (!a || !b || a.length < 3 || b.length < 3) return false;
+  if (a === b) return true;
+  const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
+  return shorter.split(" ").length >= 2 && longer.startsWith(`${shorter} `);
+}
+
+/** Past rows for the same shop beat a blank "Other". Most common category wins. */
+export function categoryFromHistory(note: string, type: TxType, txs: Transaction[]) {
+  const key = merchantKey(note);
+  if (key.length < 3) return null;
+  const counts = new Map<string, number>();
+  for (const tx of txs) {
+    if (tx.type !== type) continue;
+    if (tx.categoryId === "other" || tx.categoryId === "other-income") continue;
+    if (!sameMerchant(merchantKey(tx.note), key)) continue;
+    counts.set(tx.categoryId, (counts.get(tx.categoryId) ?? 0) + 1);
+  }
+  let best: string | null = null;
+  let n = 0;
+  for (const [id, count] of counts) {
+    if (count > n) {
+      best = id;
+      n = count;
+    }
+  }
+  return best;
 }
 
 function ruleMatches(pattern: string, note: string) {

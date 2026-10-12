@@ -1,4 +1,4 @@
-import { CATEGORIES, getCategory } from "./categories";
+import { allCategories } from "./categories";
 import { classifyNote } from "./intelligence";
 import type { MemoryRule, Transaction, TxType } from "./types";
 
@@ -1037,5 +1037,5 @@ export function categorize(note: string, type: TxType, rules: MemoryRule[] = [])
 }
 
 export function categoriesForSelect(type: TxType) {
-  return CATEGORIES.filter((c) => c.type === type && c.id !== "transfer-in" && c.id !== "transfer-out");
+  return allCategories().filter((c) => c.type === type && c.id !== "transfer-in" && c.id !== "transfer-out");
 }

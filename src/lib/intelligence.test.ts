@@ -3,8 +3,10 @@ import { test } from "node:test";
 import { interpretChat } from "./chat-brain.ts";
 import {
   applyRulesToTxs,
+  categoryFromHistory,
   classifyNote,
   isTransferTx,
+  merchantKey,
   pairTransfers,
 } from "./intelligence.ts";
 import { parseBankStatement } from "./statement.ts";
@@ -125,4 +127,23 @@ test("ANZ sample CSV tags Sharesies and savings transfers", () => {
 test("debt payments are debt, not living", () => {
   assert.equal(classifyNote("AP Afterpay", "expense").categoryId, "debt");
   assert.equal(classifyNote("DD personal loan", "expense").categoryId, "debt");
+});
+
+test("nz merchants and past shops fill the blank category", () => {
+  assert.equal(classifyNote("VT CHEMIST WAREHOUSE QUEEN", "expense").categoryId, "health");
+  assert.equal(classifyNote("VTNZ MANUKAU WOF", "expense").categoryId, "vehicle");
+  assert.equal(classifyNote("VT TRADEME PURCHASE", "expense").categoryId, "shopping");
+  assert.equal(merchantKey("VT Pak n Save M 483561"), "pak n save");
+  const past = categoryFromHistory("VT PAK N SAVE ALBANY 22", "expense", [
+    {
+      id: "1",
+      type: "expense",
+      amount: 40,
+      categoryId: "groceries",
+      note: "VT Pak n Save M 100",
+      date: "2026-01-01",
+      createdAt: "2026-01-01",
+    },
+  ]);
+  assert.equal(past, "groceries");
 });

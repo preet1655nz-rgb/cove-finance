@@ -77,6 +77,7 @@ type FinanceState = {
   refreshNotices: () => void;
   resetSample: () => void;
   clearAll: () => void;
+  rememberCategory: (pattern: string, categoryId: string) => void;
   importData: (raw: unknown) => boolean;
   importTransactions: (rows: ImportRow[], accountId?: string) => { added: number; skipped: number };
   upsertAccount: (account: Omit<BankAccount, "id"> & { id?: string }) => string;
@@ -280,6 +281,7 @@ export const useFinanceStore = create<FinanceState>()(
       },
       clearAll: () => {
         setCustomCategories([]);
+        const settings = get().settings;
         set(
           withNotices({
             ...get(),
@@ -287,10 +289,22 @@ export const useFinanceStore = create<FinanceState>()(
             budgets: [],
             bills: [],
             notices: [],
+            accounts: [],
+            rules: [],
+            facts: [],
+            chat: [],
             covePending: null,
             customCategories: [],
+            importAccountId: null,
+            settings: { ...settings, rideshare: undefined, customFrom: undefined, customTo: undefined },
           }),
         );
+      },
+      rememberCategory: (pattern, categoryId) => {
+        const key = pattern.trim().toLowerCase();
+        if (key.length < 3 || !categoryId) return;
+        const rules = get().rules.filter((rule) => !(rule.kind === "category" && rule.pattern === key));
+        set({ rules: [{ id: uid(), pattern: key, kind: "category" as const, categoryId }, ...rules].slice(0, 400) });
       },
       importData: (raw) => {
         if (!raw || typeof raw !== "object") return false;

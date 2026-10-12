@@ -19,8 +19,8 @@ import {
   readStatementFile,
   type StatementDraft,
 } from "@/lib/statement";
-import { classifyNote, inferAccountMeta } from "@/lib/intelligence";
-import { CATEGORIES, isTransferCategory } from "@/lib/categories";
+import { classifyNote, categoryFromHistory, inferAccountMeta, merchantKey, prettyPayee, sameMerchant } from "@/lib/intelligence";
+import { allCategories, isTransferCategory, slugCategoryId } from "@/lib/categories";
 import { inferStatementType, looksLikeOwnAccountMove } from "@/lib/statement-direction";
 import { useFinanceStore } from "@/lib/store";
 import type { TxType } from "@/lib/types";
@@ -47,6 +47,10 @@ export function StatementImport() {
   const [needsPassword, setNeedsPassword] = useState(false);
   const [accountId, setAccountId] = useState("");
   const [newAccount, setNewAccount] = useState("");
+  const [naming, setNaming] = useState<{ key: string; name: string } | null>(null);
+  const upsertCustomCategory = useFinanceStore((s) => s.upsertCustomCategory);
+  const rememberCategory = useFinanceStore((s) => s.rememberCategory);
+  const customCategories = useFinanceStore((s) => s.customCategories);
 
   useEffect(() => {
     if (!open) return;
@@ -64,6 +68,7 @@ export function StatementImport() {
     setNeedsPassword(false);
     setAccountId("");
     setNewAccount("");
+    setNaming(null);
   }
 
   function applyParse(result: ReturnType<typeof parseBankStatement>) {
@@ -87,6 +92,10 @@ export function StatementImport() {
         skipReason = "transfer";
       }
       if (isTransferCategory(categoryId)) skipReason = skipReason ?? "transfer";
+      if ((categoryId === "other" || categoryId === "other-income") && !skipReason) {
+        const past = categoryFromHistory(r.note, type, useFinanceStore.getState().transactions);
+        if (past) categoryId = past;
+      }
       const transferish = Boolean(skipReason === "transfer" || isTransferCategory(categoryId));
       return {
         ...r,
@@ -179,6 +188,47 @@ export function StatementImport() {
         return merged;
       }),
     );
+  }
+
+  function optionsFor(row: ReviewRow) {
+    const base =
+      row.skipReason === "transfer" || row.categoryId.startsWith("transfer")
+        ? allCategories().filter((c) => c.type === row.type)
+        : categoriesForSelect(row.type);
+    return base;
+  }
+
+  function applyCategory(row: ReviewRow, categoryId: string) {
+    const key = merchantKey(row.note);
+    let siblings = 0;
+    setRows((list) =>
+      list.map((item) => {
+        if (item.key === row.key) return { ...item, categoryId };
+        const shop = merchantKey(item.note);
+        const sameShop = key.length >= 3 && item.type === row.type && sameMerchant(shop, key) && !item.duplicate;
+        const untouched = item.categoryId === row.categoryId || item.categoryId === "other" || item.categoryId === "other-income";
+        if (sameShop && untouched && !isTransferCategory(item.categoryId)) {
+          siblings += 1;
+          return { ...item, categoryId };
+        }
+        return item;
+      }),
+    );
+    if (!isTransferCategory(categoryId)) rememberCategory(key, categoryId);
+    if (siblings) toast.message(`Same shop on ${siblings} other ${siblings === 1 ? "row" : "rows"}. Cove will use this next time.`);
+    else if (key.length >= 3) toast.message("Cove will use this category for that shop next time.");
+  }
+
+  function saveNamedCategory(row: ReviewRow) {
+    const name = naming?.name.trim() ?? "";
+    if (name.length < 2) {
+      toast.error("Give the category a name");
+      return;
+    }
+    const id = slugCategoryId(name);
+    upsertCustomCategory({ id, name, type: row.type });
+    setNaming(null);
+    applyCategory(row, id);
   }
 
   const included = rows.filter((r) => r.included);
@@ -329,7 +379,9 @@ export function StatementImport() {
             <p className="text-sm text-muted-foreground">
               {included.length} to import · {incomeN} in · {expenseN} out
               {dupN ? ` · ${dupN} already in Cove` : ""}
-              {rows.filter((r) => !r.included).length ? ` · ${rows.filter((r) => !r.included).length} skipped (shown below)` : ""}
+            </p>
+            <p className="text-[12px] text-muted-foreground">
+              Shops Cove already knows are filled in. Change one and the same shop in this file follows. Add a category if the list is missing it.
             </p>
             {warnings.map((w) => (
               <p key={w} className="text-[12px] text-muted-foreground">
@@ -359,35 +411,60 @@ export function StatementImport() {
                       <span className="text-[12px] text-muted-foreground lg:hidden">{row.date}</span>
                     </label>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{row.note || "Untitled"}</p>
-                      <p className="hidden text-[12px] text-muted-foreground lg:block">
-                        {row.date}
+                      <p className="truncate text-sm font-medium">{prettyPayee(row.note)}</p>
+                      <p className="truncate text-[12px] text-muted-foreground">
+                        <span className="hidden lg:inline">{row.date}</span>
+                        {prettyPayee(row.note).toLowerCase() !== row.note.trim().toLowerCase() ? ` · ${row.note}` : ""}
                         {row.duplicate ? " · already in Cove" : ""}
-                        {row.skipReason === "transfer" ? " · transfer / other-account credit" : ""}
-                        {!row.included ? " · skipped — tick to add" : ""}
-                      </p>
-                      <p className="text-[12px] text-muted-foreground lg:hidden">
-                        {row.duplicate ? "already in Cove · " : ""}
-                        {row.skipReason === "transfer" ? "transfer / credit · " : ""}
-                        {!row.included ? "skipped — tick to add" : ""}
+                        {row.skipReason === "transfer" ? " · transfer" : ""}
+                        {row.categoryId === "other" || row.categoryId === "other-income" ? " · pick a category" : ""}
                       </p>
                     </div>
                     <div className="flex flex-nowrap items-center gap-2">
                       <TypeToggle value={row.type} onChange={(type) => patch(row.key, { type })} />
-                      <select
-                        value={row.categoryId}
-                        onChange={(e) => patch(row.key, { categoryId: e.target.value })}
-                        className="h-9 min-w-0 max-w-36 flex-1 rounded-md bg-card px-2 text-[13px] shadow-card lg:flex-none"
-                      >
-                        {(row.skipReason === "transfer" || row.categoryId.startsWith("transfer")
-                          ? CATEGORIES.filter((c) => c.type === row.type)
-                          : categoriesForSelect(row.type)
-                        ).map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
+                      {naming?.key === row.key ? (
+                        <form
+                          className="flex min-w-0 flex-1 items-center gap-1"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            saveNamedCategory(row);
+                          }}
+                        >
+                          <input
+                            autoFocus
+                            value={naming.name}
+                            onChange={(e) => setNaming({ key: row.key, name: e.target.value })}
+                            placeholder="New category"
+                            className="h-9 min-w-0 flex-1 rounded-md bg-card px-2 text-[13px] shadow-card outline-none"
+                          />
+                          <button type="submit" className="h-9 shrink-0 rounded-md bg-foreground px-2 text-[12px] text-background">
+                            Add
+                          </button>
+                          <button type="button" className="h-9 shrink-0 px-1 text-[12px] text-muted-foreground" onClick={() => setNaming(null)}>
+                            Cancel
+                          </button>
+                        </form>
+                      ) : (
+                        <select
+                          value={row.categoryId}
+                          onChange={(e) => {
+                            if (e.target.value === "__new") {
+                              setNaming({ key: row.key, name: "" });
+                              return;
+                            }
+                            applyCategory(row, e.target.value);
+                          }}
+                          className="h-9 min-w-0 max-w-40 flex-1 rounded-md bg-card px-2 text-[13px] shadow-card lg:flex-none"
+                          key={customCategories.map((c) => c.id).join("|")}
+                        >
+                          {optionsFor(row).map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                          <option value="__new">Add a category…</option>
+                        </select>
+                      )}
                       <input
                         inputMode="decimal"
                         aria-label={`Amount for ${row.note || row.date}`}

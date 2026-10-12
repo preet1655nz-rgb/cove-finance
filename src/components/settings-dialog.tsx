@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { useState } from "react";
 import { useAccountSession } from "@/lib/account-session";
 import { signOutAccount } from "@/lib/account-vault";
 
@@ -27,6 +28,8 @@ export function SettingsDialog() {
   const budgets = useFinanceStore((s) => s.budgets);
   const bills = useFinanceStore((s) => s.bills);
   const { session } = useAccountSession();
+  const clearAll = useFinanceStore((s) => s.clearAll);
+  const [wipeArmed, setWipeArmed] = useState(false);
 
   async function enableBrowser() {
     if (!("Notification" in window)) {
@@ -135,6 +138,32 @@ export function SettingsDialog() {
           <Button variant="outline" onClick={() => { setOpen(false); setImportOpen(true); }}>
             Upload bank statement
           </Button>
+          <div className="rounded-lg border border-destructive/30 px-3 py-3">
+            <p className="text-sm font-medium">Erase all data</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+              Deletes every transaction, bill, budget, account, and remembered shop. Your login stays. This cannot be undone.
+            </p>
+            <Button
+              variant="destructive"
+              className="mt-3"
+              onClick={() => {
+                if (!wipeArmed) {
+                  setWipeArmed(true);
+                  return;
+                }
+                clearAll();
+                setWipeArmed(false);
+                toast.success("Books cleared");
+              }}
+            >
+              {wipeArmed ? "Tap again to erase everything" : "Erase all data"}
+            </Button>
+            {wipeArmed ? (
+              <button type="button" className="mt-2 block text-[12px] text-muted-foreground underline-offset-4 hover:underline" onClick={() => setWipeArmed(false)}>
+                Cancel
+              </button>
+            ) : null}
+          </div>
           <p className="text-[12px] leading-relaxed text-muted-foreground">
             Sign-out only leaves this device. The Gmail account and every transaction, budget and bill stay in Cove.
           </p>
