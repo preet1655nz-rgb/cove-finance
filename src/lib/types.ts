@@ -92,6 +92,17 @@ export type Notice = {
 
 export type VehicleKind = "petrol" | "diesel" | "hybrid" | "electric";
 
+export type KmRatePair = { tier1: number; tier2: number };
+
+export type KmRates = {
+  label: string;
+  tierKm: number;
+  petrol: KmRatePair;
+  diesel: KmRatePair;
+  hybrid: KmRatePair;
+  electric: KmRatePair;
+};
+
 export type RideshareSettings = {
   method: "actual" | "kilometre";
   vehicle: VehicleKind;
@@ -99,6 +110,8 @@ export type RideshareSettings = {
   businessPct: number | null;
   /** Total kilometres this tax year, business and private together. */
   totalKm: number | null;
+  /** Overrides the built-in Inland Revenue kilometre rates for the current year. */
+  kmRates?: KmRates;
 };
 
 export type Settings = {
@@ -109,6 +122,7 @@ export type Settings = {
   customFrom?: string;
   customTo?: string;
   homeWidget?: boolean;
+  appearance?: "light" | "dark";
   rideshare?: RideshareSettings;
 };
 

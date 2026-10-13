@@ -1,8 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { getCategory, setCustomCategories } from "./categories";
+import { getCategory, isTransferCategory, setCustomCategories } from "./categories";
 import { interpretChat, type PendingIntent } from "./chat-brain";
-import { applyRulesToTxs, classifyNote, pairTransfers } from "./intelligence";
+import { classifyNote, pairTransfers } from "./intelligence";
 import { buildNotices, maybeBrowserNotify } from "./notify";
 import { spentInCategory } from "./period";
 import { buildSeed, defaultSettings } from "./seed";
@@ -345,22 +345,29 @@ export const useFinanceStore = create<FinanceState>()(
           seen.add(fp);
           const type = row.type || getCategory(row.categoryId).type;
           const tagged = classifyNote(note, type, get().rules);
+          const categoryId = row.categoryId || tagged.categoryId;
           added.push({
             id: uid(),
             type,
             amount: Math.round(row.amount * 100) / 100,
-            categoryId: tagged.categoryId,
+            categoryId,
             note,
             date: row.date,
             createdAt: new Date().toISOString(),
             accountId: row.accountId ?? accountId,
             counterparty: tagged.counterparty,
-            transfer: tagged.transfer,
+            transfer:
+              categoryId === tagged.categoryId
+                ? tagged.transfer
+                : isTransferCategory(categoryId)
+                  ? { direction: type === "income" ? "in" : "out", otherLabel: tagged.counterparty }
+                  : undefined,
+            reviewed: categoryId !== "other" && categoryId !== "other-income",
           });
         }
         if (added.length) {
           const latest = added.reduce((m, t) => (t.date > m ? t.date : m), added[0].date);
-          const merged = pairTransfers(applyRulesToTxs([...added, ...existing], get().rules), get().accounts);
+          const merged = pairTransfers([...added, ...existing], get().accounts);
           set(
             withNotices({
               ...get(),

@@ -3,6 +3,7 @@ import { AccountSessionProvider } from "@/lib/account-session";
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { PwaRegister } from "@/components/pwa-register";
+import { ThemeSync } from "@/components/theme-sync";
 import { Toaster } from "@/components/ui/sonner";
 import appCss from "../styles.css?url";
 
@@ -44,6 +45,7 @@ export const Route = createRootRoute({
       </head>
       <body>
         <PreviewHostBridge />
+        <ThemeSync />
         <PwaRegister />
         <AccountSessionProvider>
           <AuthProvider>

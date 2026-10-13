@@ -1,6 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Upload } from "lucide-react";
+import { CategoryPicker } from "@/components/category-picker";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +16,7 @@ import {
   NZ_BANK_SAMPLES,
   applyDuplicates,
   categoriesForSelect,
+  latestEntryDate,
   parseBankStatement,
   readStatementFile,
   type StatementDraft,
@@ -24,7 +26,8 @@ import { allCategories, isTransferCategory, slugCategoryId } from "@/lib/categor
 import { inferStatementType, looksLikeOwnAccountMove } from "@/lib/statement-direction";
 import { useFinanceStore } from "@/lib/store";
 import type { TxType } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { addDays, cn } from "@/lib/utils";
+import { formatDayLong } from "@/lib/format";
 
 type ReviewRow = StatementDraft & { skipReason?: "duplicate" | "transfer" | "invalid" };
 
@@ -50,7 +53,8 @@ export function StatementImport() {
   const [naming, setNaming] = useState<{ key: string; name: string } | null>(null);
   const upsertCustomCategory = useFinanceStore((s) => s.upsertCustomCategory);
   const rememberCategory = useFinanceStore((s) => s.rememberCategory);
-  const customCategories = useFinanceStore((s) => s.customCategories);
+  const transactions = useFinanceStore((s) => s.transactions);
+  const booksThrough = latestEntryDate(transactions);
 
   useEffect(() => {
     if (!open) return;
@@ -315,7 +319,9 @@ export function StatementImport() {
               <Upload className="size-5 text-muted-foreground" strokeWidth={1.75} />
               <p className="text-sm font-medium">{busy ? "Reading every page…" : "Drop a bank statement here"}</p>
               <p className="max-w-xs text-[12px] text-muted-foreground">
-                ANZ, ASB, Westpac, BNZ, Kiwibank, TSB — CSV or PDF. Credits come in as income. Debits go out as expenses.
+                {booksThrough
+                  ? `Cove already has entries through ${formatDayLong(booksThrough)}. Start this file from ${formatDayLong(addDays(booksThrough, 1))}. Matching rows are left unchecked.`
+                  : "ANZ, ASB, Westpac, BNZ, Kiwibank, TSB — CSV or PDF. Credits come in as income. Debits go out as expenses."}
               </p>
             </button>
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -384,7 +390,8 @@ export function StatementImport() {
             </div>
             <p className="text-sm text-muted-foreground">
               {included.length} to import · {incomeN} in · {expenseN} out
-              {dupN ? ` · ${dupN} already in Cove` : ""}
+              {dupN ? ` · ${dupN} already in Cove, left out` : ""}
+              {booksThrough ? ` · books run to ${formatDayLong(booksThrough)}` : ""}
             </p>
             <p className="text-[12px] text-muted-foreground">
               Shops Cove already knows are filled in. Change one and the same shop in this file follows. Add a category if the list is missing it.
@@ -401,9 +408,8 @@ export function StatementImport() {
                     key={row.key}
                     className={cn(
                       "flex flex-col gap-2 px-3 py-3 lg:flex-row lg:items-center",
-                      !row.included && "bg-amber-50/80",
-                      row.skipReason === "transfer" && "bg-sky-50",
-                      row.duplicate && "bg-amber-50",
+                      !row.included && "opacity-70",
+                      row.duplicate && "bg-muted/70",
                     )}
                   >
                     <label className="flex items-start gap-3 lg:w-8 lg:shrink-0">
@@ -421,7 +427,7 @@ export function StatementImport() {
                       <p className="truncate text-[12px] text-muted-foreground">
                         <span className="hidden lg:inline">{row.date}</span>
                         {prettyPayee(row.note).toLowerCase() !== row.note.trim().toLowerCase() ? ` · ${row.note}` : ""}
-                        {row.duplicate ? " · already in Cove" : ""}
+                        {row.duplicate ? " · already in Cove, not added again" : ""}
                         {row.skipReason === "transfer" ? " · transfer" : ""}
                         {row.categoryId === "credit-card" ? " · pays the card, not a second expense" : ""}
                         {row.categoryId === "other" || row.categoryId === "other-income" ? " · pick a category" : ""}
@@ -452,25 +458,16 @@ export function StatementImport() {
                           </button>
                         </form>
                       ) : (
-                        <select
+                        <CategoryPicker
                           value={row.categoryId}
-                          onChange={(e) => {
-                            if (e.target.value === "__new") {
-                              setNaming({ key: row.key, name: "" });
-                              return;
-                            }
-                            applyCategory(row, e.target.value);
+                          options={optionsFor(row)}
+                          onChange={(id) => applyCategory(row, id)}
+                          onCreate={(name) => {
+                            const id = slugCategoryId(name);
+                            upsertCustomCategory({ id, name, type: row.type });
+                            applyCategory(row, id);
                           }}
-                          className="h-9 min-w-0 max-w-40 flex-1 rounded-md bg-card px-2 text-[13px] shadow-card lg:flex-none"
-                          key={customCategories.map((c) => c.id).join("|")}
-                        >
-                          {optionsFor(row).map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                          <option value="__new">Add a category…</option>
-                        </select>
+                        />
                       )}
                       <input
                         inputMode="decimal"

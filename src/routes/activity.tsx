@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input";
 import { getCategory } from "@/lib/categories";
 import { formatDayLong, money } from "@/lib/format";
 import { inPeriod, sumBy } from "@/lib/period";
+import { latestEntryDate } from "@/lib/statement";
 import { useFinanceStore } from "@/lib/store";
 import type { TxType } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { addDays, cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/activity")({ component: ActivityPage });
 
@@ -57,6 +58,7 @@ function Activity() {
 
   const income = sumBy(list, "income");
   const expense = sumBy(list, "expense");
+  const through = latestEntryDate(txs);
 
   return (
     <div className="space-y-6">
@@ -72,6 +74,12 @@ function Activity() {
           <Button onClick={() => setAddOpen(true)}>Add</Button>
         </div>
       </header>
+
+      <p className="text-sm text-muted-foreground">
+        {through
+          ? `Last entry is ${formatDayLong(through)}. The next statement should start ${formatDayLong(addDays(through, 1))}. Rows that match a shop already here are left out.`
+          : "No entries yet. Upload a statement and Cove will remember the last date."}
+      </p>
 
       <PeriodSelect value={period} onChange={setPeriod} />
 

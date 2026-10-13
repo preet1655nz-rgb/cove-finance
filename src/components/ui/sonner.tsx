@@ -1,9 +1,11 @@
 import { Toaster as Sonner } from "sonner";
+import { useFinanceStore } from "@/lib/store";
 
 function Toaster() {
+  const appearance = useFinanceStore((s) => s.settings.appearance ?? "light");
   return (
     <Sonner
-      theme="light"
+      theme={appearance}
       className="toaster group"
       toastOptions={{
         classNames: {

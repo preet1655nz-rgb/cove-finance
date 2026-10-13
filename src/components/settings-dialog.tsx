@@ -1,4 +1,5 @@
-import { CURRENCIES } from "@/lib/types";
+import { CURRENCIES, type KmRates, type VehicleKind } from "@/lib/types";
+import { defaultKmRates, defaultRideshare } from "@/lib/rideshare";
 import { useFinanceStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import {
@@ -113,6 +114,17 @@ export function SettingsDialog() {
           </div>
           <div className="flex items-center justify-between gap-4 rounded-lg bg-muted/60 px-3 py-3">
             <div>
+              <p className="text-sm font-medium">Night</p>
+              <p className="text-[12px] text-muted-foreground">Dark, quiet, closer to an iPhone lock screen</p>
+            </div>
+            <Switch
+              checked={(settings.appearance ?? "light") === "dark"}
+              onCheckedChange={(on) => updateSettings({ appearance: on ? "dark" : "light" })}
+            />
+          </div>
+          <KmRateFields />
+          <div className="flex items-center justify-between gap-4 rounded-lg bg-muted/60 px-3 py-3">
+            <div>
               <p className="text-sm font-medium">Browser notices</p>
               <p className="text-[12px] text-muted-foreground">Budget and bill alerts on this device</p>
             </div>
@@ -170,5 +182,62 @@ export function SettingsDialog() {
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+const VEHICLES: VehicleKind[] = ["petrol", "diesel", "hybrid", "electric"];
+
+function KmRateFields() {
+  const settings = useFinanceStore((s) => s.settings);
+  const updateSettings = useFinanceStore((s) => s.updateSettings);
+  const ride = settings.rideshare ?? defaultRideshare();
+  const rates = ride.kmRates ?? defaultKmRates();
+
+  function save(next: KmRates) {
+    updateSettings({ rideshare: { ...ride, kmRates: next } });
+  }
+
+  return (
+    <div className="rounded-lg bg-muted/60 px-3 py-3">
+      <p className="text-sm font-medium">Kilometre rates</p>
+      <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+        Inland Revenue rates for the current tax year. Drive uses these when the claim method is the kilometre rate.
+      </p>
+      <div className="mt-3 flex flex-col gap-1.5">
+        <Label htmlFor="km-year">Year label</Label>
+        <Input id="km-year" value={rates.label} onChange={(e) => save({ ...rates, label: e.target.value })} />
+      </div>
+      <div className="mt-3 flex flex-col gap-1.5">
+        <Label htmlFor="km-tier">Tier 1 kilometres</Label>
+        <Input
+          id="km-tier"
+          inputMode="decimal"
+          value={String(rates.tierKm)}
+          onChange={(e) => save({ ...rates, tierKm: Math.max(0, Number(e.target.value) || 0) })}
+        />
+      </div>
+      <div className="mt-3 grid grid-cols-[1fr_5rem_5rem] gap-2 text-[11px] text-muted-foreground">
+        <span>Vehicle</span>
+        <span>Tier 1</span>
+        <span>Tier 2</span>
+      </div>
+      {VEHICLES.map((kind) => (
+        <div key={kind} className="mt-2 grid grid-cols-[1fr_5rem_5rem] items-center gap-2">
+          <span className="text-sm capitalize">{kind}</span>
+          <Input
+            inputMode="decimal"
+            aria-label={`${kind} tier 1`}
+            value={String(rates[kind].tier1)}
+            onChange={(e) => save({ ...rates, [kind]: { ...rates[kind], tier1: Math.max(0, Number(e.target.value) || 0) } })}
+          />
+          <Input
+            inputMode="decimal"
+            aria-label={`${kind} tier 2`}
+            value={String(rates[kind].tier2)}
+            onChange={(e) => save({ ...rates, [kind]: { ...rates[kind], tier2: Math.max(0, Number(e.target.value) || 0) } })}
+          />
+        </div>
+      ))}
+    </div>
   );
 }

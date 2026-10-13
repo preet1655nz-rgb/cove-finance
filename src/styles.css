@@ -27,11 +27,14 @@
   --color-ring: #161616;
   --color-income: #1f6a45;
   --color-expense: #8a4336;
-  --color-chart-1: #1f6a45;
-  --color-chart-2: #8a4336;
+  --color-chart-1: #1f8a4c;
+  --color-chart-2: #d4572a;
   --color-chart-3: #5c6b73;
-  --color-chart-4: #6b7c6e;
-  --color-chart-5: #7a6b5c;
+  --color-chart-4: #7b5ea7;
+  --color-chart-5: #3d5a80;
+  --color-chart-6: #0a84c1;
+  --color-chart-7: #c4920a;
+  --color-chart-8: #8d6e63;
   --color-sidebar: #f6f6f4;
   --color-sidebar-foreground: #161616;
   --color-sidebar-muted: #6d6d68;
@@ -45,6 +48,43 @@
   --radius: 12px;
 
   --shadow-border: 0 0 0 1px rgb(22 22 22 / 0.06);
+}
+
+html[data-theme="dark"] {
+  --color-background: #000000;
+  --color-foreground: #f5f5f7;
+  --color-card: #1c1c1e;
+  --color-card-foreground: #f5f5f7;
+  --color-popover: #2c2c2e;
+  --color-popover-foreground: #f5f5f7;
+  --color-primary: #f5f5f7;
+  --color-primary-foreground: #000000;
+  --color-secondary: #2c2c2e;
+  --color-secondary-foreground: #f5f5f7;
+  --color-muted: #2c2c2e;
+  --color-muted-foreground: #98989d;
+  --color-accent: #2c2c2e;
+  --color-accent-foreground: #f5f5f7;
+  --color-destructive: #ff453a;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #38383a;
+  --color-input: #38383a;
+  --color-ring: #f5f5f7;
+  --color-income: #30d158;
+  --color-expense: #ff453a;
+  --color-chart-1: #30d158;
+  --color-chart-2: #ff453a;
+  --color-chart-3: #98989d;
+  --color-chart-4: #bf5af2;
+  --color-chart-5: #5e5ce6;
+  --color-chart-6: #64d2ff;
+  --color-chart-7: #ffd60a;
+  --color-chart-8: #ff9f0a;
+  --color-sidebar: #000000;
+  --color-sidebar-foreground: #f5f5f7;
+  --color-sidebar-muted: #98989d;
+  --shadow-border: 0 0 0 1px rgb(255 255 255 / 0.08);
+  color-scheme: dark;
 }
 
 @layer base {
@@ -129,5 +169,35 @@
 
 header.sticky {
   background: color-mix(in srgb, var(--color-background) 88%, transparent);
-  backdrop-filter: saturate(1.1) blur(16px);
+  backdrop-filter: saturate(1.2) blur(18px);
+}
+
+@keyframes cove-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+main {
+  animation: cove-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+button,
+a,
+select,
+input {
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.2s ease;
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.98);
 }

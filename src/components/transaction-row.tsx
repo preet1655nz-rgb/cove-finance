@@ -1,4 +1,5 @@
 import { getCategory } from "@/lib/categories";
+import { categoryColor } from "@/lib/chart-colors";
 import { formatDay, money } from "@/lib/format";
 import { useFinanceStore } from "@/lib/store";
 import type { Transaction } from "@/lib/types";
@@ -18,7 +19,7 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
       aria-label={`Edit ${tx.note || cat.name}, ${money(tx.amount, currency)}`}
       className="flex w-full min-h-11 items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors duration-150 hover:bg-muted/60"
     >
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-foreground">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-foreground" style={{ color: categoryColor(tx.categoryId) }}>
         <Icon className="size-4" strokeWidth={1.75} />
       </span>
       <span className="min-w-0 flex-1">

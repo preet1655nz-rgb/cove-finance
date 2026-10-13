@@ -7,18 +7,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { money } from "@/lib/format";
+import { downloadDriveBalanceSheet, downloadDriveProfitAndLoss } from "@/lib/drive-pdf";
 import { activeRange } from "@/lib/period";
 import {
-  IRD_KM,
   IRD_RIDESHARE_URL,
   GST_REGISTER_TURNOVER,
   businessShare,
   classifyGig,
   defaultRideshare,
+  driveReport,
   kilometreClaim,
+  kmScheduleFrom,
   platformOf,
   rollingGigIncome,
-  sumKind,
   type GigKind,
 } from "@/lib/rideshare";
 import { useFinanceStore } from "@/lib/store";
@@ -59,6 +60,7 @@ function DriveDesk() {
   const range = activeRange(txs, period, cycleMode, cycleOffset, { from: customFrom, to: customTo });
   const inPeriod = useMemo(() => txs.filter((t) => inRange(t.date, range.from, range.to)), [txs, range.from, range.to]);
   const slice = useMemo(() => inPeriod.filter((t) => classifyGig(t)), [inPeriod]);
+  const report = useMemo(() => driveReport(txs, settings, range.from, range.to), [txs, settings, range.from, range.to]);
   const ledgerRows = useMemo(
     () =>
       inPeriod.filter((t) => {
@@ -68,23 +70,39 @@ function DriveDesk() {
       }),
     [inPeriod],
   );
-  const income = sumKind(slice, "income");
-  const fees = sumKind(slice, "fee");
-  const vehicle = sumKind(slice, "vehicle");
-  const phone = sumKind(slice, "phone");
-  const claimBase = vehicle + phone;
-  const actualClaim = businessShare(claimBase, settings.businessPct);
-  const profit = income - fees - (actualClaim ?? claimBase);
   const yearIncome = rollingGigIncome(txs, todayISO());
-  const platforms = (["Uber", "Didi", "Other"] as const)
-    .map((name) => ({
-      name,
-      amount: slice.filter((t) => classifyGig(t) === "income" && platformOf(t) === name).reduce((s, t) => s + t.amount, 0),
-    }))
-    .filter((row) => row.amount > 0);
+  const name = useFinanceStore((s) => s.settings.displayName);
 
   function patch(next: Partial<typeof settings>) {
     updateSettings({ rideshare: { ...settings, ...next } });
+  }
+
+  async function downloadPl() {
+    await downloadDriveProfitAndLoss({
+      name: name.trim() || "Drive",
+      period: range.label,
+      incomeLines: report.incomeLines,
+      expenseLines: report.expenseLines,
+      income: report.income,
+      fees: report.fees,
+      gross: report.gross,
+      deduction: report.deduction,
+      net: report.net,
+      methodNote: report.useKm
+        ? `Deduction uses the kilometre rate (${report.schedule.label}), not the recorded fuel and repairs as well.`
+        : "Deduction uses actual recorded vehicle and phone costs. Set a business-use % so private trips are left out.",
+    });
+  }
+
+  async function downloadBs() {
+    await downloadDriveBalanceSheet({
+      name: name.trim() || "Drive",
+      asAt: range.to,
+      equity: report.equity,
+      methodNote: report.useKm
+        ? `Kilometre claim uses ${report.schedule.label}.`
+        : "Actual costs are the business share of vehicle and phone costs recorded in Cove.",
+    });
   }
 
   return (
@@ -117,21 +135,16 @@ function DriveDesk() {
         <Desk
           currency={currency}
           label={range.label}
-          income={income}
-          fees={fees}
-          vehicle={vehicle}
-          phone={phone}
-          profit={profit}
-          actualClaim={actualClaim}
-          businessPct={settings.businessPct}
-          platforms={platforms}
-          slice={slice}
+          report={report}
           yearIncome={yearIncome}
+          slice={slice}
           onAdd={() => setAddOpen(true)}
+          onProfit={() => void downloadPl()}
+          onBalance={() => void downloadBs()}
         />
       ) : null}
       {tab === "ledger" ? <Ledger rows={ledgerRows} currency={currency} onAdd={() => setAddOpen(true)} /> : null}
-      {tab === "claim" ? <Claim settings={settings} patch={patch} vehicle={vehicle} phone={phone} currency={currency} /> : null}
+      {tab === "claim" ? <Claim settings={settings} patch={patch} vehicle={report.vehicle} phone={report.phone} currency={currency} /> : null}
     </div>
   );
 }
@@ -139,48 +152,59 @@ function DriveDesk() {
 function Desk({
   currency,
   label,
-  income,
-  fees,
-  vehicle,
-  phone,
-  profit,
-  actualClaim,
-  businessPct,
-  platforms,
-  slice,
+  report,
   yearIncome,
+  slice,
   onAdd,
+  onProfit,
+  onBalance,
 }: {
   currency: string;
   label: string;
-  income: number;
-  fees: number;
-  vehicle: number;
-  phone: number;
-  profit: number;
-  actualClaim: number | null;
-  businessPct: number | null;
-  platforms: { name: string; amount: number }[];
-  slice: Transaction[];
+  report: ReturnType<typeof driveReport>;
   yearIncome: number;
+  slice: Transaction[];
   onAdd: () => void;
+  onProfit: () => void;
+  onBalance: () => void;
 }) {
   const empty = slice.length === 0;
   return (
     <div className="space-y-10">
       <section>
-        <p className="font-display text-5xl tracking-tight tabular-nums">{money(profit, currency)}</p>
+        <p className="font-display text-5xl tracking-tight tabular-nums">{money(report.net, currency)}</p>
         <p className="mt-2 text-sm text-muted-foreground">
           Surplus · {label.toLowerCase()}
-          {actualClaim == null ? "" : ` · ${businessPct}% of running costs`}
+          {report.useKm ? " · kilometre rate" : ""}
         </p>
       </section>
 
       <section className="grid grid-cols-2 gap-x-6 gap-y-5 border-y border-border py-5 sm:grid-cols-4">
-        <Stat label="Gig income" value={money(income, currency)} />
-        <Stat label="Fees" value={money(fees, currency)} />
-        <Stat label="Vehicle" value={money(vehicle, currency)} />
-        <Stat label="Phone" value={money(phone, currency)} />
+        <Stat label="Gig income" value={money(report.income, currency)} />
+        <Stat label="Fees" value={money(report.fees, currency)} />
+        <Stat label="Vehicle" value={money(report.vehicle, currency)} />
+        <Stat label="Phone" value={money(report.phone, currency)} />
+      </section>
+
+      <section className="rounded-2xl bg-card p-4 shadow-card sm:p-5">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <h2 className="text-sm font-medium">Profit and loss</h2>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={onProfit}>
+              P&L PDF
+            </Button>
+            <Button variant="outline" size="sm" onClick={onBalance}>
+              Balance sheet
+            </Button>
+          </div>
+        </div>
+        <StatementLines title="Income" lines={report.incomeLines} totalLabel="Total income" total={report.income} currency={currency} />
+        <StatementLines title="Deduction" lines={report.expenseLines} totalLabel="Net surplus" total={report.net} currency={currency} />
+        <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
+          {report.useKm
+            ? "The kilometre rate replaces actual fuel and repairs for the same vehicle. The rate is the tax-year figure from Settings, not only this period."
+            : "Actual costs use the vehicle and phone rows in this period. Set a logbook % on Claim so private use stays out."}
+        </p>
       </section>
 
       {yearIncome >= GST_REGISTER_TURNOVER * 0.8 ? (
@@ -209,11 +233,11 @@ function Desk({
             <h2 className="mb-2 text-sm font-medium">Where costs sit</h2>
             <CategoryDonut txs={slice.filter((t) => t.type === "expense")} currency={currency} />
           </section>
-          {platforms.length ? (
+          {report.platforms.length ? (
             <section>
               <h2 className="mb-1 text-sm font-medium">By platform</h2>
               <ul>
-                {platforms.map((row) => (
+                {report.platforms.map((row) => (
                   <li key={row.name} className="flex items-center justify-between border-b border-border py-3 text-sm last:border-0">
                     <span>{row.name}</span>
                     <span className="tabular-nums">{money(row.amount, currency)}</span>
@@ -224,6 +248,41 @@ function Desk({
           ) : null}
         </>
       )}
+    </div>
+  );
+}
+
+function StatementLines({
+  title,
+  lines,
+  totalLabel,
+  total,
+  currency,
+}: {
+  title: string;
+  lines: { label: string; amount: number; hint?: string }[];
+  totalLabel: string;
+  total: number;
+  currency: string;
+}) {
+  return (
+    <div className="mt-4">
+      <p className="text-[11px] tracking-wide text-muted-foreground uppercase">{title}</p>
+      <ul>
+        {lines.map((line) => (
+          <li key={line.label} className="flex items-baseline justify-between gap-3 border-b border-border/70 py-2 text-sm">
+            <span>
+              {line.label}
+              {line.hint ? <span className="mt-0.5 block text-[11px] text-muted-foreground">{line.hint}</span> : null}
+            </span>
+            <span className="tabular-nums">{money(line.amount, currency)}</span>
+          </li>
+        ))}
+        <li className="flex items-baseline justify-between py-2 text-sm font-medium">
+          <span>{totalLabel}</span>
+          <span className="tabular-nums">{money(total, currency)}</span>
+        </li>
+      </ul>
     </div>
   );
 }
@@ -301,8 +360,9 @@ function Claim({
 }) {
   const pct = settings.businessPct;
   const actual = businessShare(vehicle + phone, pct);
+  const schedule = kmScheduleFrom(settings);
   const km =
-    settings.totalKm != null && pct != null ? kilometreClaim(settings.totalKm, pct, settings.vehicle) : null;
+    settings.totalKm != null && pct != null ? kilometreClaim(settings.totalKm, pct, settings.vehicle, schedule) : null;
   return (
     <div className="space-y-4">
       <section className="rounded-[24px] bg-card p-4 shadow-card">
@@ -380,9 +440,9 @@ function Claim({
         </section>
       ) : (
         <section className="rounded-[24px] bg-card p-4 shadow-card">
-          <h2 className="text-sm font-medium">Kilometre rate · {IRD_KM.label}</h2>
+          <h2 className="text-sm font-medium">Kilometre rate · {schedule.label}</h2>
           <p className="mt-1 text-[13px] text-muted-foreground">
-            Tier 1 covers the business share of the first {IRD_KM.tierKm.toLocaleString("en-NZ")} km of total travel (private included). Tier 2 is the rest.
+            Tier 1 covers the business share of the first {schedule.tierKm.toLocaleString("en-NZ")} km of total travel (private included). Update the year’s rates in Settings.
           </p>
           <div className="mt-3 flex flex-col gap-1.5">
             <Label htmlFor="total-km">Total km this tax year</Label>
@@ -401,7 +461,7 @@ function Claim({
           {km ? (
             <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
               {km.tier1Business.toLocaleString("en-NZ", { maximumFractionDigits: 0 })} business km at ${km.rate.tier1.toFixed(2)}, then{" "}
-              {km.tier2Business.toLocaleString("en-NZ", { maximumFractionDigits: 0 })} km at ${km.rate.tier2.toFixed(2)}. Rates are the latest published 2026 figures Cove has on file. Check ird.govt.nz if you are filing a later year.
+              {km.tier2Business.toLocaleString("en-NZ", { maximumFractionDigits: 0 })} km at ${km.rate.tier2.toFixed(2)}. These are the rates saved in Settings for {schedule.label}.
             </p>
           ) : null}
         </section>

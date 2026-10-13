@@ -14,11 +14,10 @@ import {
   YAxis,
 } from "recharts";
 import { getCategory } from "@/lib/categories";
+import { categoryColor } from "@/lib/chart-colors";
 import { formatMonthShort, money } from "@/lib/format";
 import { monthlySeries } from "@/lib/period";
 import type { Transaction } from "@/lib/types";
-
-const CHART = ["var(--color-chart-1)", "var(--color-chart-2)", "var(--color-chart-3)", "var(--color-chart-4)", "var(--color-chart-5)"];
 
 export function useMounted() {
   const [m, setM] = useState(false);
@@ -42,7 +41,8 @@ function ChartTip({
     <div className="rounded-md bg-popover px-3 py-2 text-[12px] shadow-card">
       {label ? <p className="mb-1 font-medium">{label}</p> : null}
       {payload.map((p) => (
-        <p key={p.name} className="tabular-nums text-muted-foreground">
+        <p key={p.name} className="flex items-center gap-2 tabular-nums text-muted-foreground">
+          <span className="size-1.5 rounded-full" style={{ background: p.color }} />
           {p.name} · {money(p.value, currency)}
         </p>
       ))}
@@ -62,17 +62,18 @@ export function FlowChart({ txs, currency }: { txs: Transaction[]; currency: str
   );
   if (!mounted) return <div className="h-[220px] rounded-lg bg-muted/50" />;
   return (
-    <div className="h-[220px] w-full">
+    <div className="w-full">
+      <div className="h-[220px] w-full">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="inFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-income)" stopOpacity={0.28} />
-              <stop offset="100%" stopColor="var(--color-income)" stopOpacity={0} />
+              <stop offset="0%" stopColor="var(--color-chart-1)" stopOpacity={0.35} />
+              <stop offset="100%" stopColor="var(--color-chart-1)" stopOpacity={0} />
             </linearGradient>
             <linearGradient id="outFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-expense)" stopOpacity={0.22} />
-              <stop offset="100%" stopColor="var(--color-expense)" stopOpacity={0} />
+              <stop offset="0%" stopColor="var(--color-chart-2)" stopOpacity={0.28} />
+              <stop offset="100%" stopColor="var(--color-chart-2)" stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid stroke="var(--color-border)" vertical={false} />
@@ -85,10 +86,15 @@ export function FlowChart({ txs, currency }: { txs: Transaction[]; currency: str
             tickFormatter={(v: number) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
           />
           <Tooltip content={<ChartTip currency={currency} />} />
-          <Area type="monotone" dataKey="income" name="Income" stroke="var(--color-income)" fill="url(#inFill)" strokeWidth={1.75} />
-          <Area type="monotone" dataKey="expense" name="Spending" stroke="var(--color-expense)" fill="url(#outFill)" strokeWidth={1.75} />
+          <Area type="monotone" dataKey="income" name="Income" stroke="var(--color-chart-1)" fill="url(#inFill)" strokeWidth={2} />
+          <Area type="monotone" dataKey="expense" name="Spending" stroke="var(--color-chart-2)" fill="url(#outFill)" strokeWidth={2} />
         </AreaChart>
       </ResponsiveContainer>
+      </div>
+      <div className="mt-2 flex gap-4 text-[12px] text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5"><span className="size-1.5 rounded-full" style={{ background: "var(--color-chart-1)" }} /> Income</span>
+        <span className="inline-flex items-center gap-1.5"><span className="size-1.5 rounded-full" style={{ background: "var(--color-chart-2)" }} /> Spending</span>
+      </div>
     </div>
   );
 }
@@ -165,7 +171,7 @@ export function CategoryDonut({
             {data.map((d, i) => (
               <Cell
                 key={d.id}
-                fill={CHART[i % CHART.length]}
+                fill={categoryColor(d.id, i)}
                 opacity={selectedId && selectedId !== d.id ? 0.35 : 1}
                 stroke={selectedId === d.id ? "var(--color-foreground)" : "none"}
                 strokeWidth={selectedId === d.id ? 2 : 0}
@@ -185,7 +191,7 @@ export function CategoryDonut({
               style={{ opacity: selectedId && selectedId !== d.id ? 0.45 : 1 }}
             >
               <span className="flex min-w-0 items-center gap-2">
-                <span className="size-1.5 shrink-0 rounded-full" style={{ background: CHART[i % CHART.length] }} />
+                <span className="size-1.5 shrink-0 rounded-full" style={{ background: categoryColor(d.id, i) }} />
                 <span className="truncate">{d.name}</span>
               </span>
               <span className="tabular-nums text-muted-foreground">
@@ -217,8 +223,8 @@ export function BudgetBars({
           <XAxis type="number" hide />
           <YAxis type="category" dataKey="name" width={88} tick={{ fill: "var(--color-muted-foreground)", fontSize: 11 }} tickLine={false} axisLine={false} />
           <Tooltip content={<ChartTip currency={currency} />} />
-          <Bar dataKey="budget" name="Budget" fill="var(--color-muted)" radius={[0, 4, 4, 0]} barSize={8} />
-          <Bar dataKey="spent" name="Spent" fill="var(--color-chart-3)" radius={[0, 4, 4, 0]} barSize={8} />
+          <Bar dataKey="budget" name="Budget" fill="var(--color-chart-6)" radius={[0, 4, 4, 0]} barSize={8} />
+          <Bar dataKey="spent" name="Spent" fill="var(--color-chart-2)" radius={[0, 4, 4, 0]} barSize={8} />
         </BarChart>
       </ResponsiveContainer>
     </div>

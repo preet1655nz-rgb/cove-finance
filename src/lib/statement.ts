@@ -1,5 +1,5 @@
 import { allCategories } from "./categories";
-import { classifyNote } from "./intelligence";
+import { classifyNote, merchantKey } from "./intelligence";
 import type { MemoryRule, Transaction, TxType } from "./types";
 
 export type StatementDraft = {
@@ -72,6 +72,33 @@ export function txFingerprint(date: string, amount: number, note: string) {
     .trim()
     .slice(0, 48);
   return `${date}|${amount.toFixed(2)}|${n}`;
+}
+
+export function looseFingerprint(date: string, amount: number, note: string) {
+  const shop = merchantKey(note);
+  if (shop.length < 3) return null;
+  return `${date}|${Number(amount).toFixed(2)}|${shop}`;
+}
+
+export function latestEntryDate(rows: { date: string }[]) {
+  let latest = "";
+  for (const row of rows) if (row.date > latest) latest = row.date;
+  return latest || null;
+}
+
+export function duplicateAgainst(
+  date: string,
+  amount: number,
+  note: string,
+  existing: { date: string; amount: number; note: string }[],
+) {
+  const exact = txFingerprint(date, amount, note);
+  const loose = looseFingerprint(date, amount, note);
+  for (const row of existing) {
+    if (txFingerprint(row.date, row.amount, row.note) === exact) return "exact" as const;
+    if (loose && looseFingerprint(row.date, row.amount, row.note) === loose) return "same-shop" as const;
+  }
+  return null;
 }
 
 export function parseBankStatement(input: string, filename = ""): ParseResult {
@@ -259,9 +286,8 @@ function finalize(
 }
 
 export function applyDuplicates<T extends StatementDraft>(rows: T[], existing: Transaction[]): T[] {
-  const have = new Set(existing.map((t) => txFingerprint(t.date, t.amount, t.note)));
   return rows.map((r) => {
-    const duplicate = have.has(r.key);
+    const duplicate = duplicateAgainst(r.date, r.amount, r.note, existing) != null;
     return { ...r, duplicate, included: duplicate ? false : r.included };
   });
 }
