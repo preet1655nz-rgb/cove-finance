@@ -226,7 +226,7 @@ function parseUnsafe(input: string, filename: string): ParseResult {
   if (looksPdf) {
     const anz = parseAnzLedger(text, yearHint);
     if (anz.length) {
-      return finalize(anz, "anz-ledger", 0, ["Read as an ANZ-style statement (withdrawals and deposits)."]);
+      return finalize(anz, "anz-ledger", 0, ["Read as an ANZ-style statement (withdrawals and deposits).", ...coverageWarnings(text, anz)]);
     }
     const generic = parseGenericLedger(text, yearHint);
     if (generic.length) {
@@ -238,7 +238,7 @@ function parseUnsafe(input: string, filename: string): ParseResult {
   if (csv.ok) return csv;
   const anz = parseAnzLedger(text, yearHint);
   if (anz.length) {
-    return finalize(anz, "anz-ledger", 0, ["Read as an ANZ-style statement (withdrawals and deposits)."]);
+    return finalize(anz, "anz-ledger", 0, ["Read as an ANZ-style statement (withdrawals and deposits).", ...coverageWarnings(text, anz)]);
   }
   const generic = parseGenericLedger(text, yearHint);
   if (generic.length) {
@@ -429,6 +429,28 @@ function cleanTxnNote(note: string) {
     .trim();
 }
 
+
+function coverageWarnings(text: string, rows: { date: string }[]) {
+  const m = text.match(/between\s+(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})\s+and\s+(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})/i);
+  if (!m || !rows.length) return [];
+  const from = parseDate(m[1], true);
+  const to = parseDate(m[2], true);
+  if (!from || !to) return [];
+  const months = new Set(rows.map((r) => r.date.slice(0, 7)));
+  const missing: string[] = [];
+  let cursor = from.slice(0, 7);
+  const end = to.slice(0, 7);
+  while (cursor <= end) {
+    if (!months.has(cursor)) missing.push(cursor);
+    const [y, mo] = cursor.split("-").map(Number);
+    const ny = mo === 12 ? y + 1 : y;
+    const nm = mo === 12 ? 1 : mo + 1;
+    cursor = `${ny}-${String(nm).padStart(2, "0")}`;
+    if (missing.length > 8) break;
+  }
+  return missing.length ? [`This file says ${from} to ${to}, but ${missing.join(", ")} did not come through.`] : [];
+}
+
 function explodeDatedLines(line: string) {
   const parts = line
     .split(/(?=\b\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+20\d{2}\b)/i)
@@ -462,6 +484,7 @@ function parseAnzLedger(text: string, yearHint: number): Omit<StatementDraft, "k
     else if (
       merged.length &&
       !/available credit|closing date of this statement|page \d+ of \d+/i.test(line) &&
+      !/anz\.co\.nz|internet banking|\d+\/\d+$/i.test(line) &&
       !/^\d{2}-\d{4}-\d{7}/.test(line) &&
       !/\b(weekly|fortnightly|monthly|frequency|upcoming)\b/i.test(line)
     ) {

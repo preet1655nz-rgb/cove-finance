@@ -462,3 +462,33 @@ test("full ANZ Go statement 20 Jun–19 Aug 2026 reads 51 posted rows and ignore
   assert.ok(janssens.every((r) => r.categoryId === "insurance"));
 });
 
+
+test("ANZ internet banking print keeps every month, including June to August", () => {
+  const text = readFileSync(join(fixtures, "anz-ib-print.txt"), "utf8");
+  const result = parseBankStatement(text, "ANZ Internet Banking.pdf");
+  assert.equal(result.ok, true);
+  const months: Record<string, number> = {};
+  for (const row of result.rows) months[row.date.slice(0, 7)] = (months[row.date.slice(0, 7)] ?? 0) + 1;
+  assert.ok((months["2026-05"] ?? 0) >= 30, `May ${months["2026-05"]}`);
+  assert.ok((months["2026-06"] ?? 0) >= 30, `Jun ${months["2026-06"]}`);
+  assert.ok((months["2026-07"] ?? 0) >= 40, `Jul ${months["2026-07"]}`);
+  assert.ok((months["2026-08"] ?? 0) >= 45, `Aug ${months["2026-08"]}`);
+  assert.ok((months["2026-09"] ?? 0) >= 40, `Sep ${months["2026-09"]}`);
+  assert.ok((months["2026-10"] ?? 0) >= 25, `Oct ${months["2026-10"]}`);
+  assert.equal(Object.keys(months).some((k) => k.startsWith("2025")), false);
+  assert.ok(!result.warnings.some((w) => /did not come through/.test(w)), result.warnings.join(" | "));
+});
+
+test("glued ANZ print pages still split back into months", () => {
+  const glued = [
+    "Showing transactions between 01/06/2026 and 31/08/2026",
+    "12 Jun 2026 Direct Credit Uber Bv $27.32 $153.39",
+    "30 Jun 2026 Payment Guri Wstpac $400.00 $1,853.73 15 Jul 2026 Automatic Payment Gurpreet Joint $106.00 $1,640.68 03 Aug 2026 Direct Credit Didi Mobility $520.16 $1,029.59",
+  ].join("\n");
+  const result = parseBankStatement(glued, "anz-glued.pdf");
+  const months = new Set(result.rows.map((r) => r.date.slice(0, 7)));
+  assert.ok(months.has("2026-06"));
+  assert.ok(months.has("2026-07"));
+  assert.ok(months.has("2026-08"));
+  assert.ok(result.rows.length >= 4);
+});
