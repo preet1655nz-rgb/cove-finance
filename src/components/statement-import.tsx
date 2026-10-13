@@ -463,6 +463,10 @@ export function StatementImport() {
                           options={optionsFor(row)}
                           onChange={(id) => applyCategory(row, id)}
                           onCreate={(name) => {
+                            if (name.trim().length < 2) {
+                              setNaming({ key: row.key, name: "" });
+                              return;
+                            }
                             const id = slugCategoryId(name);
                             upsertCustomCategory({ id, name, type: row.type });
                             applyCategory(row, id);

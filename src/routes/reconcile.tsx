@@ -130,6 +130,7 @@ function Reconcile() {
                     options={cats}
                     onChange={(id) => match(tx.id, id, tx.note)}
                     onCreate={(name) => {
+                      if (name.trim().length < 2) return;
                       const id = slugCategoryId(name);
                       upsertCustomCategory({ id, name, type: tx.type });
                       match(tx.id, id, tx.note);
