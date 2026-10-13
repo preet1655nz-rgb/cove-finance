@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Bell, CalendarDays, Car, FileText, LayoutGrid, ListChecks, MoreHorizontal, PieChart, Plus, Receipt, Settings, Wallet } from "lucide-react";
+import { Bell, CalendarDays, Car, FileText, LayoutGrid, ListChecks, Moon, MoreHorizontal, PieChart, Plus, Receipt, Settings, Sun, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NotificationCenter } from "@/components/notification-center";
 import { ProfileGate } from "@/components/profile-gate";
@@ -157,6 +157,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 Cycle
               </button>
             </div>
+            <ThemeButton />
             <NotificationCenter />
             <Button size="sm" className="h-8 rounded-full px-3" onClick={() => setAddOpen(true)}>
               <Plus className="size-4" />
@@ -247,6 +248,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <StatementImport />
       <ProfileGate />
     </div>
+  );
+}
+
+function ThemeButton() {
+  const appearance = useFinanceStore((s) => s.settings.appearance ?? "light");
+  const updateSettings = useFinanceStore((s) => s.updateSettings);
+  const dark = appearance === "dark";
+  const Icon = dark ? Sun : Moon;
+  return (
+    <button
+      type="button"
+      aria-label={dark ? "Day" : "Night"}
+      onClick={() => updateSettings({ appearance: dark ? "light" : "dark" })}
+      className="grid size-8 place-items-center rounded-full text-foreground hover:bg-muted"
+    >
+      <Icon className="size-4" strokeWidth={1.75} />
+    </button>
   );
 }
 

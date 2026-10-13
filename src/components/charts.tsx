@@ -18,6 +18,7 @@ import { categoryColor } from "@/lib/chart-colors";
 import { formatMonthShort, money } from "@/lib/format";
 import { monthlySeries } from "@/lib/period";
 import type { Transaction } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 export function useMounted() {
   const [m, setM] = useState(false);
@@ -50,7 +51,17 @@ function ChartTip({
   );
 }
 
-export function FlowChart({ txs, currency }: { txs: Transaction[]; currency: string }) {
+export function FlowChart({
+  txs,
+  currency,
+  activeMonth = null,
+  onMonth,
+}: {
+  txs: Transaction[];
+  currency: string;
+  activeMonth?: string | null;
+  onMonth?: (month: string | null) => void;
+}) {
   const mounted = useMounted();
   const data = useMemo(
     () =>
@@ -86,14 +97,52 @@ export function FlowChart({ txs, currency }: { txs: Transaction[]; currency: str
             tickFormatter={(v: number) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))}
           />
           <Tooltip content={<ChartTip currency={currency} />} />
-          <Area type="monotone" dataKey="income" name="Income" stroke="var(--color-chart-1)" fill="url(#inFill)" strokeWidth={2} />
-          <Area type="monotone" dataKey="expense" name="Spending" stroke="var(--color-chart-2)" fill="url(#outFill)" strokeWidth={2} />
+          <Area
+            type="monotone"
+            dataKey="income"
+            name="Income"
+            stroke="var(--color-chart-1)"
+            fill="url(#inFill)"
+            strokeWidth={2}
+            activeDot={{ r: 4 }}
+            style={{ cursor: onMonth ? "pointer" : undefined }}
+            onClick={(state) => {
+              const key = (state as { payload?: { key?: string } })?.payload?.key;
+              if (!onMonth || !key) return;
+              onMonth(activeMonth === key ? null : key);
+            }}
+          />
+          <Area
+            type="monotone"
+            dataKey="expense"
+            name="Spending"
+            stroke="var(--color-chart-2)"
+            fill="url(#outFill)"
+            strokeWidth={2}
+            style={{ cursor: onMonth ? "pointer" : undefined }}
+            onClick={(state) => {
+              const key = (state as { payload?: { key?: string } })?.payload?.key;
+              if (!onMonth || !key) return;
+              onMonth(activeMonth === key ? null : key);
+            }}
+          />
         </AreaChart>
       </ResponsiveContainer>
       </div>
-      <div className="mt-2 flex gap-4 text-[12px] text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5"><span className="size-1.5 rounded-full" style={{ background: "var(--color-chart-1)" }} /> Income</span>
-        <span className="inline-flex items-center gap-1.5"><span className="size-1.5 rounded-full" style={{ background: "var(--color-chart-2)" }} /> Spending</span>
+      <div className="mt-3 flex justify-between gap-1">
+        {data.map((d) => (
+          <button
+            key={d.key}
+            type="button"
+            onClick={() => onMonth?.(activeMonth === d.key ? null : d.key)}
+            className={cn(
+              "h-7 flex-1 rounded-full text-[11px]",
+              activeMonth === d.key ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted",
+            )}
+          >
+            {d.label}
+          </button>
+        ))}
       </div>
     </div>
   );

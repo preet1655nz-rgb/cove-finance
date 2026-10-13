@@ -1,16 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowUpRight } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { CategoryDonut, FlowChart } from "@/components/charts";
 import { PageFrame } from "@/components/page-frame";
 import { PeriodSelect } from "@/components/period-select";
 import { TransactionRow } from "@/components/transaction-row";
 import { Progress } from "@/components/ui/progress";
 import { getCategory } from "@/lib/categories";
-import { money, signedMoney } from "@/lib/format";
 import { livingTxs, needsReconcile } from "@/lib/intelligence";
+import { money, signedMoney } from "@/lib/format";
+import { downloadLinesPdf } from "@/lib/drive-pdf";
 import { cashBuckets, activeRange, spentInCategory } from "@/lib/period";
-import { explainNegativeCash } from "@/lib/cycle";
 import { useFinanceStore } from "@/lib/store";
 import { endOfMonth, inRange, startOfMonth, todayISO } from "@/lib/utils";
 
@@ -51,18 +51,14 @@ function Dashboard() {
     .sort((a, x) => x.ratio - a.ratio)
     .slice(0, 4);
   const openRec = txs.filter(needsReconcile).length;
-  const cashStory = explainNegativeCash(slice, currency);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
-
-  const categoryBreakdown = useMemo(() => {
-    if (!selectedCategoryId) return [];
-    return lived
-      .filter((t) => t.categoryId === selectedCategoryId && t.type === "expense")
-      .sort((a, b) => (a.date < b.date ? 1 : -1))
-      .slice(0, 40);
-  }, [lived, selectedCategoryId]);
-
-  const categoryTotal = categoryBreakdown.reduce((s, t) => s + t.amount, 0);
+  const [monthKey, setMonthKey] = useState<string | null>(null);
+  const shown = selectedCategoryId
+    ? lived.filter((t) => t.categoryId === selectedCategoryId && t.type === "expense").sort((a, b) => (a.date < b.date ? 1 : -1))
+    : monthKey
+      ? lived.filter((t) => t.date.startsWith(monthKey)).sort((a, b) => (a.date < b.date ? 1 : -1))
+      : [];
+  const categoryTotal = shown.reduce((s, t) => s + t.amount, 0);
 
   return (
     <div className="space-y-12">
@@ -70,7 +66,7 @@ function Dashboard() {
         <div className="min-w-0">
           <p className="text-sm text-muted-foreground">{name.trim() ? name : "Overview"}</p>
           <p className="mt-2 font-display text-5xl tracking-tight tabular-nums sm:text-6xl">{signedMoney(b.cash, currency)}</p>
-          <p className="mt-2 text-sm text-muted-foreground">Cash this period · {label.toLowerCase()}</p>
+          <p className="mt-2 text-sm text-muted-foreground">{label}</p>
         </div>
         {cycleMode ? (
           <div className="flex shrink-0 items-center gap-2">
@@ -95,11 +91,7 @@ function Dashboard() {
         <Stat label="Savings" value={money(b.savings, currency, true)} />
       </section>
 
-      {b.credit > 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Card payoff {money(b.credit, currency)} left the bank to clear the card. It is not counted again as living. The shops on the card statement are the expenses.
-        </p>
-      ) : null}
+      {b.credit > 0 ? <p className="text-sm text-muted-foreground">Card payoff {money(b.credit, currency)}</p> : null}
       {openRec ? (
         <p className="-mt-6 text-sm">
           <Link to="/reconcile" className="text-foreground underline-offset-4 hover:underline">
@@ -118,16 +110,15 @@ function Dashboard() {
         {recent.length ? (
           recent.map((tx) => <TransactionRow key={tx.id} tx={tx} />)
         ) : (
-          <p className="py-10 text-sm text-muted-foreground">Nothing yet. Add an entry, or upload a statement.</p>
+          <p className="py-10 text-sm text-muted-foreground">Nothing yet.</p>
         )}
       </section>
 
       <section className="rounded-2xl bg-card p-4 shadow-card sm:p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-sm font-medium">Six months</h2>
-          <span className="text-xs text-muted-foreground">Income and living</span>
         </div>
-        <FlowChart txs={txs} currency={currency} />
+        <FlowChart txs={txs} currency={currency} activeMonth={monthKey} onMonth={(key) => { setMonthKey(key); if (key) setSelectedCategoryId(null); }} />
       </section>
 
       <section className="rounded-2xl bg-card p-4 shadow-card sm:p-6">
@@ -135,34 +126,53 @@ function Dashboard() {
           <h2 className="text-sm font-medium">Where living went</h2>
           <span className="truncate text-xs text-muted-foreground">{label}</span>
         </div>
-        <CategoryDonut txs={lived} currency={currency} showAmounts selectedId={selectedCategoryId} onSelect={setSelectedCategoryId} />
-        {selectedCategoryId ? (
+        <CategoryDonut
+          txs={lived}
+          currency={currency}
+          showAmounts
+          selectedId={selectedCategoryId}
+          onSelect={(id) => {
+            setSelectedCategoryId(id);
+            if (id) setMonthKey(null);
+          }}
+        />
+        {shown.length || selectedCategoryId || monthKey ? (
           <div className="mt-4 border-t border-border pt-4">
-            <div className="mb-3 flex items-baseline justify-between gap-2">
-              <h3 className="text-sm font-medium">{getCategory(selectedCategoryId).name}</h3>
-              <p className="text-xs tabular-nums text-muted-foreground">
-                {categoryBreakdown.length} · {money(categoryTotal, currency)}
-              </p>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h3 className="text-sm font-medium">
+                {selectedCategoryId ? getCategory(selectedCategoryId).name : monthKey}
+              </h3>
+              <div className="flex items-center gap-3">
+                <p className="text-xs tabular-nums text-muted-foreground">{money(categoryTotal, currency)}</p>
+                <button
+                  type="button"
+                  className="text-xs font-medium"
+                  onClick={() =>
+                    void downloadLinesPdf({
+                      title: selectedCategoryId ? getCategory(selectedCategoryId).name : monthKey || "Activity",
+                      name: name.trim() || "Cove",
+                      rows: shown.map((t) => ({ date: t.date, note: t.note, amount: t.amount, type: t.type })),
+                    })
+                  }
+                >
+                  PDF
+                </button>
+              </div>
             </div>
-            {categoryBreakdown.length ? (
-              <ul className="max-h-52 space-y-2 overflow-y-auto">
-                {categoryBreakdown.map((t) => (
+            {shown.length ? (
+              <ul className="max-h-64 space-y-2 overflow-y-auto">
+                {shown.map((t) => (
                   <li key={t.id} className="flex items-baseline justify-between gap-2 text-sm">
                     <span className="min-w-0 truncate">
-                      <span className="text-muted-foreground">{t.date}</span>
-                      {" · "}
-                      {t.note || getCategory(t.categoryId).name}
+                      <span className="text-muted-foreground">{t.date.slice(5)}</span> {t.note || getCategory(t.categoryId).name}
                     </span>
                     <span className="shrink-0 tabular-nums">{money(t.amount, currency)}</span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-muted-foreground">No entries in this period.</p>
+              <p className="text-sm text-muted-foreground">Nothing here.</p>
             )}
-            <button type="button" className="mt-3 text-xs text-muted-foreground underline-offset-4 hover:underline" onClick={() => setSelectedCategoryId(null)}>
-              Clear
-            </button>
           </div>
         ) : null}
       </section>

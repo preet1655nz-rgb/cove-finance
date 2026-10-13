@@ -40,6 +40,7 @@ export async function downloadDriveProfitAndLoss(opts: {
   deduction: number;
   net: number;
   methodNote: string;
+  transactions?: { date: string; note: string; amount: number; type: "income" | "expense" }[];
 }) {
   const { doc, autoTable, ink, muted } = await docShell("Statement of profit or loss", opts.period, opts.name);
   const body = [
@@ -64,8 +65,30 @@ export async function downloadDriveProfitAndLoss(opts: {
   const y = lastY(doc) + 28;
   doc.setFontSize(9);
   doc.setTextColor(...muted);
-  doc.text(opts.methodNote, 48, y, { maxWidth: 500 });
-  doc.text("Prepared from the Cove ledger. This is not an IR3 and not tax advice.", 48, 820);
+  doc.text(opts.methodNote, 48, Math.min(y, 760), { maxWidth: 500 });
+  if (opts.transactions?.length) {
+    autoTable(doc, {
+      startY: Math.min(y + 36, 780),
+      head: [["Date", "Detail", "Amount"]],
+      body: opts.transactions.map((t) => [
+        t.date,
+        t.note || "—",
+        `${t.type === "income" ? "+" : "−"}${moneyRow(t.amount)}`,
+      ]),
+      margin: { left: 48, right: 48 },
+      styles: { fontSize: 8, textColor: ink, cellPadding: 5 },
+      headStyles: { fillColor: [22, 22, 22], textColor: [246, 246, 244] },
+      columnStyles: { 2: { halign: "right" } },
+      theme: "plain",
+    });
+  }
+  const pages = doc.getNumberOfPages();
+  for (let i = 1; i <= pages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(...muted);
+    doc.text("Drive · from your Cove books", 48, 826);
+  }
   doc.save("drive-profit-and-loss.pdf");
 }
 
@@ -107,4 +130,28 @@ export async function downloadDriveBalanceSheet(opts: {
   doc.text(note, 48, y, { maxWidth: 500 });
   doc.text("Prepared from the Cove ledger. This is not an IR3 and not tax advice.", 48, 820);
   doc.save("drive-balance-sheet.pdf");
+}
+
+export async function downloadLinesPdf(opts: {
+  title: string;
+  name: string;
+  rows: { date: string; note: string; amount: number; type: "income" | "expense" }[];
+}) {
+  const { doc, autoTable, ink, muted } = await docShell(opts.title, opts.name, "");
+  autoTable(doc, {
+    startY: 104,
+    head: [["Date", "Detail", "Amount"]],
+    body: opts.rows.length
+      ? opts.rows.map((t) => [t.date, t.note || "—", `${t.type === "income" ? "+" : "−"}${moneyRow(t.amount)}`])
+      : [["—", "Nothing in this view", "—"]],
+    margin: { left: 48, right: 48 },
+    styles: { fontSize: 9, textColor: ink, cellPadding: 6 },
+    headStyles: { fillColor: [22, 22, 22], textColor: [246, 246, 244] },
+    columnStyles: { 2: { halign: "right" } },
+    theme: "plain",
+  });
+  doc.setFontSize(8);
+  doc.setTextColor(...muted);
+  doc.text("From your Cove books", 48, 826);
+  doc.save("cove-lines.pdf");
 }

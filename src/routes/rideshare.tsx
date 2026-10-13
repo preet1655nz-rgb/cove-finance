@@ -6,11 +6,11 @@ import { PeriodSelect } from "@/components/period-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getCategory } from "@/lib/categories";
 import { money } from "@/lib/format";
 import { downloadDriveBalanceSheet, downloadDriveProfitAndLoss } from "@/lib/drive-pdf";
 import { activeRange } from "@/lib/period";
 import {
-  IRD_RIDESHARE_URL,
   GST_REGISTER_TURNOVER,
   businessShare,
   classifyGig,
@@ -57,6 +57,7 @@ function DriveDesk() {
   const customFrom = useFinanceStore((s) => s.settings.customFrom);
   const customTo = useFinanceStore((s) => s.settings.customTo);
   const [tab, setTab] = useState<Tab>("desk");
+  const [withLines, setWithLines] = useState(false);
   const range = activeRange(txs, period, cycleMode, cycleOffset, { from: customFrom, to: customTo });
   const inPeriod = useMemo(() => txs.filter((t) => inRange(t.date, range.from, range.to)), [txs, range.from, range.to]);
   const slice = useMemo(() => inPeriod.filter((t) => classifyGig(t)), [inPeriod]);
@@ -77,7 +78,7 @@ function DriveDesk() {
     updateSettings({ rideshare: { ...settings, ...next } });
   }
 
-  async function downloadPl() {
+  async function downloadPl(rows: Transaction[]) {
     await downloadDriveProfitAndLoss({
       name: name.trim() || "Drive",
       period: range.label,
@@ -88,9 +89,8 @@ function DriveDesk() {
       gross: report.gross,
       deduction: report.deduction,
       net: report.net,
-      methodNote: report.useKm
-        ? `Deduction uses the kilometre rate (${report.schedule.label}), not the recorded fuel and repairs as well.`
-        : "Deduction uses actual recorded vehicle and phone costs. Set a business-use % so private trips are left out.",
+      methodNote: report.useKm ? report.schedule.label : "Actual costs",
+      transactions: withLines ? rows.map((t) => ({ date: t.date, note: t.note, amount: t.amount, type: t.type })) : undefined,
     });
   }
 
@@ -99,9 +99,7 @@ function DriveDesk() {
       name: name.trim() || "Drive",
       asAt: range.to,
       equity: report.equity,
-      methodNote: report.useKm
-        ? `Kilometre claim uses ${report.schedule.label}.`
-        : "Actual costs are the business share of vehicle and phone costs recorded in Cove.",
+      methodNote: report.useKm ? report.schedule.label : "Actual costs",
     });
   }
 
@@ -109,7 +107,7 @@ function DriveDesk() {
     <div className="space-y-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <p className="text-[13px] text-muted-foreground">Pulled from your Cove ledger</p>
+          <p className="text-[13px] text-muted-foreground">{range.label}</p>
           <h1 className="mt-1 font-display text-3xl tracking-tight">Drive</h1>
         </div>
         <PeriodSelect value={period} onChange={setPeriod} />
@@ -139,8 +137,10 @@ function DriveDesk() {
           yearIncome={yearIncome}
           slice={slice}
           onAdd={() => setAddOpen(true)}
-          onProfit={() => void downloadPl()}
+          onProfit={(rows) => void downloadPl(rows)}
           onBalance={() => void downloadBs()}
+          withLines={withLines}
+          setWithLines={setWithLines}
         />
       ) : null}
       {tab === "ledger" ? <Ledger rows={ledgerRows} currency={currency} onAdd={() => setAddOpen(true)} /> : null}
@@ -158,6 +158,8 @@ function Desk({
   onAdd,
   onProfit,
   onBalance,
+  withLines,
+  setWithLines,
 }: {
   currency: string;
   label: string;
@@ -165,87 +167,106 @@ function Desk({
   yearIncome: number;
   slice: Transaction[];
   onAdd: () => void;
-  onProfit: () => void;
+  onProfit: (rows: Transaction[]) => void;
   onBalance: () => void;
+  withLines: boolean;
+  setWithLines: (on: boolean) => void;
 }) {
+  const [monthKey, setMonthKey] = useState<string | null>(null);
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const picked = slice
+    .filter((t) => (monthKey ? t.date.startsWith(monthKey) : true))
+    .filter((t) => (categoryId ? t.categoryId === categoryId : true))
+    .filter(() => Boolean(monthKey || categoryId))
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+  const viewing = monthKey || categoryId ? picked : slice;
   const empty = slice.length === 0;
+
   return (
-    <div className="space-y-10">
-      <section>
-        <p className="font-display text-5xl tracking-tight tabular-nums">{money(report.net, currency)}</p>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Surplus · {label.toLowerCase()}
-          {report.useKm ? " · kilometre rate" : ""}
-        </p>
+    <div className="space-y-8">
+      <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="font-display text-5xl tracking-tight tabular-nums">{money(report.net, currency)}</p>
+          <p className="mt-2 text-sm text-muted-foreground">{label}</p>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setWithLines(!withLines)}
+            className={cn("h-8 rounded-full px-3 text-xs", withLines ? "bg-foreground text-background" : "bg-muted text-muted-foreground")}
+          >
+            Lines
+          </button>
+          <Button variant="outline" size="sm" onClick={() => onProfit(viewing)}>
+            P&L
+          </Button>
+          <Button variant="outline" size="sm" onClick={onBalance}>
+            Sheet
+          </Button>
+        </div>
       </section>
 
       <section className="grid grid-cols-2 gap-x-6 gap-y-5 border-y border-border py-5 sm:grid-cols-4">
-        <Stat label="Gig income" value={money(report.income, currency)} />
+        <Stat label="Income" value={money(report.income, currency)} />
         <Stat label="Fees" value={money(report.fees, currency)} />
         <Stat label="Vehicle" value={money(report.vehicle, currency)} />
         <Stat label="Phone" value={money(report.phone, currency)} />
       </section>
 
-      <section className="rounded-2xl bg-card p-4 shadow-card sm:p-5">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-          <h2 className="text-sm font-medium">Profit and loss</h2>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={onProfit}>
-              P&L PDF
-            </Button>
-            <Button variant="outline" size="sm" onClick={onBalance}>
-              Balance sheet
-            </Button>
-          </div>
-        </div>
-        <StatementLines title="Income" lines={report.incomeLines} totalLabel="Total income" total={report.income} currency={currency} />
-        <StatementLines title="Deduction" lines={report.expenseLines} totalLabel="Net surplus" total={report.net} currency={currency} />
-        <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
-          {report.useKm
-            ? "The kilometre rate replaces actual fuel and repairs for the same vehicle. The rate is the tax-year figure from Settings, not only this period."
-            : "Actual costs use the vehicle and phone rows in this period. Set a logbook % on Claim so private use stays out."}
-        </p>
-      </section>
-
       {yearIncome >= GST_REGISTER_TURNOVER * 0.8 ? (
-        <p className="text-sm text-muted-foreground">
-          Last 12 months of gig income is {money(yearIncome, currency)}. GST registration is compulsory past {money(GST_REGISTER_TURNOVER, currency)}.
-        </p>
+        <p className="text-sm text-muted-foreground">GST {money(yearIncome, currency)} / {money(GST_REGISTER_TURNOVER, currency)}</p>
       ) : null}
 
       {empty ? (
         <div className="py-6">
-          <p className="text-sm font-medium">No driving rows in this period</p>
-          <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-            Log Uber or Didi pay as Gig work, and fuel, WOF, rego, repairs, parking, tolls or insurance as usual. Fines stay out.
-          </p>
-          <Button className="mt-4" onClick={onAdd}>
-            Add a row
-          </Button>
+          <p className="text-sm font-medium">No trips in this period</p>
+          <Button className="mt-4" onClick={onAdd}>Add</Button>
         </div>
       ) : (
         <>
           <section className="rounded-2xl bg-card p-4 shadow-card sm:p-6">
-            <h2 className="mb-4 text-sm font-medium">Cash flow</h2>
-            <FlowChart txs={slice} currency={currency} />
+            <FlowChart
+              txs={slice}
+              currency={currency}
+              activeMonth={monthKey}
+              onMonth={(key) => {
+                setMonthKey(key);
+                if (key) setCategoryId(null);
+              }}
+            />
           </section>
           <section className="rounded-2xl bg-card p-4 shadow-card sm:p-6">
-            <h2 className="mb-2 text-sm font-medium">Where costs sit</h2>
-            <CategoryDonut txs={slice.filter((t) => t.type === "expense")} currency={currency} />
+            <CategoryDonut
+              txs={slice.filter((t) => t.type === "expense")}
+              currency={currency}
+              showAmounts
+              selectedId={categoryId}
+              onSelect={(id) => {
+                setCategoryId(id);
+                if (id) setMonthKey(null);
+              }}
+            />
           </section>
-          {report.platforms.length ? (
-            <section>
-              <h2 className="mb-1 text-sm font-medium">By platform</h2>
-              <ul>
-                {report.platforms.map((row) => (
-                  <li key={row.name} className="flex items-center justify-between border-b border-border py-3 text-sm last:border-0">
-                    <span>{row.name}</span>
-                    <span className="tabular-nums">{money(row.amount, currency)}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
+          <section>
+            <div className="mb-2 flex items-baseline justify-between">
+              <h2 className="text-sm font-medium">{monthKey || (categoryId ? getCategory(categoryId).name : "This period")}</h2>
+              <p className="text-xs tabular-nums text-muted-foreground">{viewing.length}</p>
+            </div>
+            <ul>
+              {viewing.slice(0, 12).map((tx) => (
+                <li key={tx.id} className="flex items-baseline justify-between gap-3 border-b border-border/70 py-2.5 text-sm">
+                  <span className="min-w-0 truncate">
+                    <span className="text-muted-foreground">{tx.date.slice(5)}</span> {tx.note || "Untitled"}
+                  </span>
+                  <span className={cn("shrink-0 tabular-nums", tx.type === "income" && "text-income")}>{money(tx.amount, currency)}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+          <section className="grid gap-6 sm:grid-cols-2">
+            <StatementLines title="Income" lines={report.incomeLines} totalLabel="Income" total={report.income} currency={currency} />
+            <StatementLines title="Costs" lines={report.expenseLines} totalLabel="Surplus" total={report.net} currency={currency} />
+          </section>
         </>
       )}
     </div>
@@ -271,10 +292,7 @@ function StatementLines({
       <ul>
         {lines.map((line) => (
           <li key={line.label} className="flex items-baseline justify-between gap-3 border-b border-border/70 py-2 text-sm">
-            <span>
-              {line.label}
-              {line.hint ? <span className="mt-0.5 block text-[11px] text-muted-foreground">{line.hint}</span> : null}
-            </span>
+            <span>{line.label}</span>
             <span className="tabular-nums">{money(line.amount, currency)}</span>
           </li>
         ))}
@@ -367,12 +385,7 @@ function Claim({
     <div className="space-y-4">
       <section className="rounded-[24px] bg-card p-4 shadow-card">
         <h2 className="text-sm font-medium">How you claim the car</h2>
-        <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
-          Inland Revenue lets rideshare drivers use either actual costs or the kilometre rate, not both for the same vehicle. Only the income-earning share is deductible.{" "}
-          <a href={IRD_RIDESHARE_URL} className="underline underline-offset-4" target="_blank" rel="noreferrer">
-            IRD ride-sharing expenses
-          </a>
-        </p>
+        <p className="mt-1 text-[13px] text-muted-foreground">Actual costs or the kilometre rate. Not both.</p>
         <div className="mt-4 flex rounded-full bg-muted p-1">
           {(
             [
@@ -435,14 +448,14 @@ function Claim({
             {actual == null ? "Set a logbook %" : money(actual, currency)}
           </p>
           <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-            Recorded vehicle {money(vehicle, currency)} and phone {money(phone, currency)}. Fuel, repairs, WOF, registration, insurance, parking, tolls and lease payments can be claimed for the business share. The purchase price of the car cannot. Fines cannot.
+            Vehicle {money(vehicle, currency)} · phone {money(phone, currency)}
           </p>
         </section>
       ) : (
         <section className="rounded-[24px] bg-card p-4 shadow-card">
           <h2 className="text-sm font-medium">Kilometre rate · {schedule.label}</h2>
           <p className="mt-1 text-[13px] text-muted-foreground">
-            Tier 1 covers the business share of the first {schedule.tierKm.toLocaleString("en-NZ")} km of total travel (private included). Update the year’s rates in Settings.
+            First {schedule.tierKm.toLocaleString("en-NZ")} km, then the rest. Rates live in Settings.
           </p>
           <div className="mt-3 flex flex-col gap-1.5">
             <Label htmlFor="total-km">Total km this tax year</Label>
@@ -460,8 +473,7 @@ function Claim({
           <p className="mt-3 text-2xl font-medium tabular-nums tracking-tight">{km ? money(km.amount, currency) : "Add km and a logbook %"}</p>
           {km ? (
             <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-              {km.tier1Business.toLocaleString("en-NZ", { maximumFractionDigits: 0 })} business km at ${km.rate.tier1.toFixed(2)}, then{" "}
-              {km.tier2Business.toLocaleString("en-NZ", { maximumFractionDigits: 0 })} km at ${km.rate.tier2.toFixed(2)}. These are the rates saved in Settings for {schedule.label}.
+              {km.tier1Business.toLocaleString("en-NZ", { maximumFractionDigits: 0 })} km at ${km.rate.tier1.toFixed(2)} · {km.tier2Business.toLocaleString("en-NZ", { maximumFractionDigits: 0 })} km at ${km.rate.tier2.toFixed(2)}
             </p>
           ) : null}
         </section>
