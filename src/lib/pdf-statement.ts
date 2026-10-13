@@ -103,7 +103,9 @@ async function extractWithPdfJs(
     }
     const lined = pages.join("\n");
     const loose = loosePages.join("\n");
-    return lined.length >= loose.length ? lined : `${lined}\n${loose}`;
+    const dateLines = (s: string) => (s.match(/^\s*\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/gim) || []).length;
+    if (dateLines(lined) >= 8) return lined;
+    return dateLines(loose) > dateLines(lined) ? loose : lined;
   } finally {
     try {
       await task.destroy();

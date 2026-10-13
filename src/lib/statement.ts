@@ -429,6 +429,14 @@ function cleanTxnNote(note: string) {
     .trim();
 }
 
+function explodeDatedLines(line: string) {
+  const parts = line
+    .split(/(?=\b\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+20\d{2}\b)/i)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return parts.length > 1 ? parts : [line];
+}
+
 function parseAnzLedger(text: string, yearHint: number): Omit<StatementDraft, "key" | "duplicate" | "included">[] {
   const lines = text
     .split("\n")
@@ -445,6 +453,11 @@ function parseAnzLedger(text: string, yearHint: number): Omit<StatementDraft, "k
       }
       continue;
     }
+    const exploded = explodeDatedLines(line);
+    if (exploded.length > 1) {
+      for (const part of exploded) merged.push(part);
+      continue;
+    }
     if (ANZ_DATE.test(line) && !STATEMENT_CHROME.test(line)) merged.push(line);
     else if (
       merged.length &&
@@ -456,6 +469,7 @@ function parseAnzLedger(text: string, yearHint: number): Omit<StatementDraft, "k
     }
   }
   const out: Omit<StatementDraft, "key" | "duplicate" | "included">[] = [];
+  let hadExplicitYear = false;
   for (const line of merged) {
     if (isStatementJunk(line) || /totals at end|available credit|page \d+ of \d+/i.test(line)) {
       const amounts = moneyOnLine(line);
@@ -464,12 +478,14 @@ function parseAnzLedger(text: string, yearHint: number): Omit<StatementDraft, "k
       continue;
     }
     const dm = line.match(
-      /^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[,\s]+(.*)$/i,
+      /^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)(?:[,\s]+(20\d{2}))?[,\s]+(.*)$/i,
     );
     if (!dm) continue;
-    const date = parseDate(`${dm[1]} ${dm[2]} ${yearHint}`, true, yearHint);
+    const explicitYear = dm[3] ? Number(dm[3]) : 0;
+    if (explicitYear) hadExplicitYear = true;
+    const date = parseDate(`${dm[1]} ${dm[2]} ${explicitYear || yearHint}`, true, yearHint);
     if (!date) continue;
-    let rest = dm[3].replace(/^,+/, "").trim();
+    let rest = dm[4].replace(/^,+/, "").trim();
     rest = rest
       .replace(/\bYour available credit\b[\s\S]*$/i, "")
       .replace(/\bTotals at end[\s\S]*$/i, "")
@@ -527,7 +543,7 @@ function parseAnzLedger(text: string, yearHint: number): Omit<StatementDraft, "k
       categoryId: categorize(note, type),
     });
   }
-  return walkStatementYears(out, yearHint);
+  return hadExplicitYear ? out : walkStatementYears(out, yearHint);
 }
 
 function walkStatementYears<T extends { date: string }>(rows: T[], yearHint: number): T[] {
