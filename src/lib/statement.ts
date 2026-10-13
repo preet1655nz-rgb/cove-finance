@@ -527,7 +527,31 @@ function parseAnzLedger(text: string, yearHint: number): Omit<StatementDraft, "k
       categoryId: categorize(note, type),
     });
   }
-  return out;
+  return walkStatementYears(out, yearHint);
+}
+
+function walkStatementYears<T extends { date: string }>(rows: T[], yearHint: number): T[] {
+  if (rows.length < 2) return rows;
+  const parts = rows.map((r) => {
+    const [y, m, d] = r.date.split("-").map(Number);
+    return { y, m, d };
+  });
+  const first = parts[0];
+  const last = parts[parts.length - 1];
+  const newestFirst = first.m !== last.m ? first.m > last.m || (first.y > last.y) : false;
+  let year = yearHint || first.y;
+  let prevMonth = parts[0].m;
+  return rows.map((row, i) => {
+    const month = parts[i].m;
+    const day = parts[i].d;
+    if (i > 0) {
+      if (newestFirst && month > prevMonth + 1) year -= 1;
+      if (!newestFirst && month + 1 < prevMonth) year += 1;
+    }
+    prevMonth = month;
+    const date = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return date === row.date ? row : { ...row, date };
+  });
 }
 
 function parseGenericLedger(text: string, yearHint: number): Omit<StatementDraft, "key" | "duplicate" | "included">[] {

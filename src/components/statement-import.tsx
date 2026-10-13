@@ -35,6 +35,8 @@ export function StatementImport() {
   const open = useFinanceStore((s) => s.importOpen);
   const setOpen = useFinanceStore((s) => s.setImportOpen);
   const importTransactions = useFinanceStore((s) => s.importTransactions);
+  const setPeriod = useFinanceStore((s) => s.setPeriod);
+  const updateSettings = useFinanceStore((s) => s.updateSettings);
   const accounts = useFinanceStore((s) => s.accounts);
   const upsertAccount = useFinanceStore((s) => s.upsertAccount);
   const navigate = useNavigate();
@@ -265,6 +267,13 @@ export function StatementImport() {
     );
     if (result.added) toast.success(`Imported ${result.added} ${result.added === 1 ? "entry" : "entries"}`);
     else toast.error("Nothing new to import");
+    if (result.added) {
+      const dates = included.map((r) => r.date).filter(Boolean).sort();
+      if (dates.length) {
+        updateSettings({ customFrom: dates[0], customTo: dates[dates.length - 1] });
+        setPeriod("custom");
+      }
+    }
     if (result.skipped) toast.message(`${result.skipped} skipped as duplicates or invalid`);
     if (included[0]) {
       void navigate({ to: "/activity" });
@@ -395,6 +404,7 @@ export function StatementImport() {
               {dupN ? ` · ${dupN} left out` : ""}
               {warnings.length ? ` · ${warnings.length} notes` : ""}
             </p>
+            <p className="shrink-0 text-[12px] text-muted-foreground">{monthSummary(rows)}</p>
             {warnings.length ? (
               <details className="shrink-0 text-[12px] text-muted-foreground">
                 <summary className="cursor-pointer">Notes</summary>
@@ -517,6 +527,21 @@ export function StatementImport() {
       </DialogContent>
     </Dialog>
   );
+}
+
+
+function monthSummary(rows: { date: string }[]) {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (!row.date) continue;
+    const key = row.date.slice(0, 7);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return [...counts.entries()]
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .map(([key, n]) => `${names[Number(key.slice(5, 7)) - 1] || key} ${n}`)
+    .join(" · ");
 }
 
 function TypeToggle({ value, onChange }: { value: TxType; onChange: (t: TxType) => void }) {
