@@ -26,8 +26,26 @@ function snapshot(): VaultPayload {
   };
 }
 
+export const ERASED_KEY = "cove-erased";
+
+export function markErased() {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(ERASED_KEY, "1");
+}
+
+export function clearErased() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(ERASED_KEY);
+}
+
+function wasErased() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(ERASED_KEY) === "1";
+}
+
 export async function pullCloudLedger(email: string) {
   try {
+    if (wasErased()) return false;
     const res = await fetch(coveApiUrl(`/api/vault?email=${encodeURIComponent(email)}`));
     if (!res.ok) return false;
     const data = (await res.json()) as { row?: { payload?: VaultPayload } | null };
@@ -37,6 +55,7 @@ export async function pullCloudLedger(email: string) {
     const localCount = useFinanceStore.getState().transactions.length;
     if (remoteCount === 0) return false;
     if (remoteCount < localCount) return false;
+    if (localCount === 0 && wasErased()) return false;
     useFinanceStore.getState().importData(payload);
     return true;
   } catch {
@@ -44,15 +63,17 @@ export async function pullCloudLedger(email: string) {
   }
 }
 
-export async function pushCloudLedger(email: string) {
+export async function pushCloudLedger(email: string, opts?: { allowEmpty?: boolean }) {
   const payload = snapshot();
-  if (!Array.isArray(payload.transactions) || payload.transactions.length === 0) return;
+  const empty = !Array.isArray(payload.transactions) || payload.transactions.length === 0;
+  if (empty && !opts?.allowEmpty && !wasErased()) return;
   try {
     await fetch(coveApiUrl("/api/vault"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email, payload }),
     });
+    if (empty) clearErased();
   } catch {
     /* local ledger still saved */
   }

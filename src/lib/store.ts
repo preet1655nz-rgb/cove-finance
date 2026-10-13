@@ -299,6 +299,32 @@ export const useFinanceStore = create<FinanceState>()(
             settings: { ...settings, rideshare: undefined, customFrom: undefined, customTo: undefined },
           }),
         );
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("cove-erased", "1");
+          const empty = JSON.stringify({
+            state: {
+              transactions: [],
+              budgets: [],
+              bills: [],
+              notices: [],
+              settings: { ...settings, rideshare: undefined, customFrom: undefined, customTo: undefined },
+              accounts: [],
+              rules: [],
+              facts: [],
+              chat: [],
+              covePending: null,
+              customCategories: [],
+              cycleMode: get().cycleMode,
+            },
+            version: 5,
+          });
+          const keys: string[] = [];
+          for (let i = 0; i < window.localStorage.length; i += 1) {
+            const key = window.localStorage.key(i);
+            if (key?.startsWith("cove-finance-v3:")) keys.push(key);
+          }
+          for (const key of keys) window.localStorage.setItem(key, empty);
+        }
       },
       rememberCategory: (pattern, categoryId) => {
         const key = pattern.trim().toLowerCase();

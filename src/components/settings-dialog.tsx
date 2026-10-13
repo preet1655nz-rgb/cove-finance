@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { useState } from "react";
 import { useAccountSession } from "@/lib/account-session";
 import { signOutAccount } from "@/lib/account-vault";
+import { pushCloudLedger } from "@/lib/cloud-sync";
 
 export function SettingsDialog() {
   const open = useFinanceStore((s) => s.settingsOpen);
@@ -164,6 +165,7 @@ export function SettingsDialog() {
                   return;
                 }
                 clearAll();
+                if (session?.email) void pushCloudLedger(session.email, { allowEmpty: true });
                 setWipeArmed(false);
                 toast.success("Books cleared");
               }}

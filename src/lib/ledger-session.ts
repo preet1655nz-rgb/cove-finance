@@ -49,9 +49,10 @@ export function attachLedgerForUser(userId: string | null) {
   if (typeof window !== "undefined" && userId) {
     const userPersisted = readPersisted(name);
     const guestPersisted = readPersisted(LEDGER_KEY);
+    const erased = window.localStorage.getItem("cove-erased") === "1";
     const userEmpty = !userPersisted?.state?.transactions?.length;
     const guestHas = Boolean(guestPersisted?.state?.transactions?.length);
-    if (userEmpty && guestHas && guestPersisted) {
+    if (!erased && userEmpty && guestHas && guestPersisted) {
       window.localStorage.setItem(name, JSON.stringify(guestPersisted));
     }
   }
