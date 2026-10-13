@@ -22,6 +22,7 @@ import {
   rollingGigIncome,
   type GigKind,
 } from "@/lib/rideshare";
+import { estimateDriveTax } from "@/lib/drive-tax";
 import { useFinanceStore } from "@/lib/store";
 import type { Transaction, VehicleKind } from "@/lib/types";
 import { inRange, todayISO, cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ function DrivePage() {
 
 const TABS = [
   { id: "desk", label: "Desk" },
+  { id: "insights", label: "Insights" },
   { id: "ledger", label: "Ledger" },
   { id: "claim", label: "Claim" },
 ] as const;
@@ -141,6 +143,15 @@ function DriveDesk() {
           onBalance={() => void downloadBs()}
           withLines={withLines}
           setWithLines={setWithLines}
+        />
+      ) : null}
+      {tab === "insights" ? (
+        <DriveInsights
+          currency={currency}
+          report={report}
+          yearIncome={yearIncome}
+          slice={slice}
+          txs={txs}
         />
       ) : null}
       {tab === "ledger" ? <Ledger rows={ledgerRows} currency={currency} onAdd={() => setAddOpen(true)} /> : null}
@@ -305,6 +316,120 @@ function StatementLines({
   );
 }
 
+
+function DriveInsights({
+  currency,
+  report,
+  yearIncome,
+  slice,
+  txs,
+}: {
+  currency: string;
+  report: ReturnType<typeof driveReport>;
+  yearIncome: number;
+  slice: Transaction[];
+  txs: Transaction[];
+}) {
+  const [monthKey, setMonthKey] = useState<string | null>(null);
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const tax = estimateDriveTax({ netProfit: report.net, grossFares: report.income });
+  const gstPct = Math.min(100, Math.round((yearIncome / GST_REGISTER_TURNOVER) * 100));
+  const shown = slice
+    .filter((t) => (monthKey ? t.date.startsWith(monthKey) : true))
+    .filter((t) => (categoryId ? t.categoryId === categoryId : true))
+    .filter(() => Boolean(monthKey || categoryId))
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+  const viewing = monthKey || categoryId ? shown : slice;
+
+  return (
+    <div className="space-y-8">
+      <section className="grid grid-cols-2 gap-x-6 gap-y-5 border-y border-border py-5 sm:grid-cols-4">
+        <Stat label="Surplus" value={money(report.net, currency)} />
+        <Stat label="Set aside" value={money(tax.setAside, currency)} />
+        <Stat label="Income tax" value={money(tax.tax, currency)} />
+        <Stat label="ACC" value={money(tax.acc, currency)} />
+      </section>
+
+      <section className="rounded-2xl bg-card p-4 shadow-card sm:p-6">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-sm font-medium">GST</h2>
+          <p className="text-xs tabular-nums text-muted-foreground">{gstPct}%</p>
+        </div>
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+          <div className="h-full rounded-full bg-foreground" style={{ width: `${gstPct}%` }} />
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">
+          {money(yearIncome, currency)} of {money(GST_REGISTER_TURNOVER, currency)} in the last 12 months.
+          {yearIncome >= GST_REGISTER_TURNOVER
+            ? " Registration is required."
+            : tax.credit
+              ? ` Flat-rate credit about ${money(tax.credit, currency)}.`
+              : ""}
+        </p>
+      </section>
+
+      <section className="rounded-2xl bg-card p-4 shadow-card sm:p-6">
+        <h2 className="mb-4 text-sm font-medium">Six months</h2>
+        <FlowChart
+          txs={slice}
+          currency={currency}
+          activeMonth={monthKey}
+          onMonth={(key) => {
+            setMonthKey(key);
+            if (key) setCategoryId(null);
+          }}
+        />
+      </section>
+
+      <section className="rounded-2xl bg-card p-4 shadow-card sm:p-6">
+        <h2 className="mb-2 text-sm font-medium">Costs</h2>
+        <CategoryDonut
+          txs={slice.filter((t) => t.type === "expense")}
+          currency={currency}
+          showAmounts
+          selectedId={categoryId}
+          onSelect={(id) => {
+            setCategoryId(id);
+            if (id) setMonthKey(null);
+          }}
+        />
+      </section>
+
+      {report.platforms.length ? (
+        <section>
+          <h2 className="mb-1 text-sm font-medium">Platforms</h2>
+          <ul>
+            {report.platforms.map((row) => (
+              <li key={row.name} className="flex items-baseline justify-between border-b border-border py-3 text-sm last:border-0">
+                <span>{row.name}</span>
+                <span className="tabular-nums">{money(row.amount, currency)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <section>
+        <div className="mb-2 flex items-baseline justify-between">
+          <h2 className="text-sm font-medium">{monthKey || (categoryId ? getCategory(categoryId).name : "This period")}</h2>
+          <p className="text-xs tabular-nums text-muted-foreground">{viewing.length}</p>
+        </div>
+        <ul>
+          {viewing.slice(0, 16).map((tx) => (
+            <li key={tx.id} className="flex items-baseline justify-between gap-3 border-b border-border/70 py-2.5 text-sm">
+              <button type="button" className="min-w-0 truncate text-left" onClick={() => useFinanceStore.getState().startEdit(tx)}>
+                <span className="text-muted-foreground">{tx.date.slice(5)}</span> {tx.note || "Untitled"}
+              </button>
+              <span className={cn("shrink-0 tabular-nums", tx.type === "income" && "text-income")}>{money(tx.amount, currency)}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 text-[12px] text-muted-foreground">Tap a row to correct it. Tax uses 2026/27 brackets and the 1.75% ACC earner's levy. Not an IR3.</p>
+      </section>
+    </div>
+  );
+}
+
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -349,6 +474,13 @@ function Ledger({ rows, currency, onAdd }: { rows: Transaction[]; currency: stri
               </p>
             </div>
             <p className="shrink-0 text-sm tabular-nums">{money(tx.amount, currency)}</p>
+            <button
+              type="button"
+              className="shrink-0 text-[12px] text-muted-foreground underline-offset-4 hover:underline"
+              onClick={() => useFinanceStore.getState().startEdit(tx)}
+            >
+              Edit
+            </button>
             <button
               type="button"
               className="shrink-0 text-[12px] text-muted-foreground underline-offset-4 hover:underline"
