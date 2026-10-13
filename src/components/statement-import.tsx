@@ -280,12 +280,14 @@ export function StatementImport() {
         if (!v) reset();
       }}
     >
-      <DialogContent className="flex max-h-[92dvh] w-[calc(100%-1.5rem)] max-w-3xl flex-col gap-4 overflow-hidden">
-        <DialogHeader>
+      <DialogContent className="top-2 flex h-[96dvh] w-[calc(100%-0.75rem)] max-w-3xl translate-y-0 flex-col gap-3 overflow-hidden p-4 sm:top-1/2 sm:h-[92dvh] sm:-translate-y-1/2 sm:p-6">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Upload statement</DialogTitle>
-          <DialogDescription>
-            PDF, CSV, OFX or QIF from any New Zealand bank. Skipped rows stay visible so you can tick them back in.
-          </DialogDescription>
+          {rows.length === 0 ? (
+            <DialogDescription>
+              PDF, CSV, OFX or QIF from any New Zealand bank.
+            </DialogDescription>
+          ) : null}
         </DialogHeader>
 
         <input
@@ -365,7 +367,7 @@ export function StatementImport() {
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col gap-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
               <label className="text-[12px] text-muted-foreground sm:w-28">Link to account</label>
               <select
                 value={accountId}
@@ -388,19 +390,21 @@ export function StatementImport() {
                 />
               ) : null}
             </div>
-            <p className="text-sm text-muted-foreground">
+            <p className="shrink-0 text-sm text-muted-foreground">
               {included.length} to import · {incomeN} in · {expenseN} out
-              {dupN ? ` · ${dupN} already in Cove, left out` : ""}
-              {booksThrough ? ` · books run to ${formatDayLong(booksThrough)}` : ""}
+              {dupN ? ` · ${dupN} left out` : ""}
+              {warnings.length ? ` · ${warnings.length} notes` : ""}
             </p>
-            <p className="text-[12px] text-muted-foreground">
-              Shops Cove already knows are filled in. Change one and the same shop in this file follows. Add a category if the list is missing it.
-            </p>
-            {warnings.map((w) => (
-              <p key={w} className="text-[12px] text-muted-foreground">
-                {w}
-              </p>
-            ))}
+            {warnings.length ? (
+              <details className="shrink-0 text-[12px] text-muted-foreground">
+                <summary className="cursor-pointer">Notes</summary>
+                <div className="mt-1 space-y-1">
+                  {warnings.map((w) => (
+                    <p key={w}>{w}</p>
+                  ))}
+                </div>
+              </details>
+            ) : null}
             <div className="min-h-0 flex-1 overflow-y-auto rounded-xl bg-muted/40 p-1">
               <ul className="divide-y divide-border/70">
                 {rows.map((row) => (
@@ -500,7 +504,7 @@ export function StatementImport() {
                 ))}
               </ul>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex shrink-0 flex-wrap gap-2">
               <Button variant="ghost" onClick={reset}>
                 Choose another
               </Button>
