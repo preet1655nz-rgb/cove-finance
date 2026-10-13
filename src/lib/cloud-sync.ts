@@ -66,16 +66,18 @@ export async function pullCloudLedger(email: string) {
 export async function pushCloudLedger(email: string, opts?: { allowEmpty?: boolean }) {
   const payload = snapshot();
   const empty = !Array.isArray(payload.transactions) || payload.transactions.length === 0;
-  if (empty && !opts?.allowEmpty && !wasErased()) return;
+  const erase = Boolean(opts?.allowEmpty || wasErased());
+  if (empty && !erase) return;
   try {
-    await fetch(coveApiUrl("/api/vault"), {
+    const res = await fetch(coveApiUrl("/api/vault"), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email, payload }),
+      body: JSON.stringify({ email, payload, erase }),
     });
-    if (empty) clearErased();
+    const body = (await res.json().catch(() => null)) as { kept?: boolean; ok?: boolean } | null;
+    if (empty && res.ok && body?.ok !== false && body?.kept !== true) clearErased();
   } catch {
-    /* local ledger still saved */
+    /* local ledger still saved; erased flag stays so a refresh cannot pull the old books */
   }
 }
 

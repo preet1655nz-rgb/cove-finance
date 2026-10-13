@@ -7,7 +7,7 @@ function txCount(payload: unknown) {
   return Array.isArray(txs) ? txs.length : 0;
 }
 
-async function writeVault(email: string, payload: unknown) {
+async function writeVault(email: string, payload: unknown, erase = false) {
   const url = process.env.DATABASE_URL?.trim();
   if (!url) return { source: "local" as const };
   const { Pool } = await import("pg");
@@ -20,7 +20,7 @@ async function writeVault(email: string, payload: unknown) {
     const prev = existing.rows[0]?.payload;
     const incomingEmpty = txCount(payload) === 0;
     const prevCount = txCount(prev);
-    if (incomingEmpty && prevCount > 0) {
+    if (incomingEmpty && prevCount > 0 && !erase) {
       return { source: "cloud" as const, kept: true, transactions: prevCount };
     }
     await pool.query(
@@ -42,7 +42,8 @@ export default defineEventHandler(async (event) => {
     return { error: "email and payload required" };
   }
   try {
-    return { ok: true, ...(await writeVault(email, body.payload)) };
+    const erase = Boolean((body as { erase?: boolean })?.erase);
+    return { ok: true, ...(await writeVault(email, body.payload, erase)) };
   } catch (err) {
     return { ok: false, source: "local", error: err instanceof Error ? err.message : "vault write failed" };
   }
